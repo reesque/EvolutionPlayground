@@ -9,6 +9,13 @@ import random
 from UIElement import *
 
 
+class GameState(Enum):
+    MAIN_MENU = 0
+    GAME_OVER = 1
+    SIM_RUNNING = 2
+    SIM_PAUSED = 3
+    GENERATION_SHIFT = 4
+
 class Simulation:
     def __init__(self):
         # Backend services
@@ -26,7 +33,7 @@ class Simulation:
         self.sprite = EntitySprite.SHEEP
         self.agents = [Agent(self.window, self.sl, self.sprite) for _ in range(self.initial_population)]
         self.foods = [Food(self.window, self.sl) for _ in range(self.initial_food_amount)]
-        self.max_offspring = 3
+        self.max_offspring = 4
 
         self.sim_state = 1
         self.ui_parent1, self.ui_parent2 = None, None
@@ -137,7 +144,7 @@ class Simulation:
         self.agents = []
         while len(agents_copy) > 1:
             if not self.is_auto:
-                card_choices = np.random.choice(agents_copy, min(len(agents_copy), 3), replace=False).tolist()
+                card_choices = np.random.choice(agents_copy, min(len(agents_copy), 4), replace=False).tolist()
                 self.ui_agent_card.reset()
                 self.ui_parent1, self.ui_parent2 = None, None
 
@@ -170,7 +177,7 @@ class Simulation:
                     self.window.tick()
 
         # Spawn new food
-        food_replenish_count = ((self.initial_food_amount - len(self.foods)) * self.food_replenish_const /
+        food_replenish_count = (self.initial_food_amount  * self.food_replenish_const /
                                 (max(1, len(self.agents) - self.food_replenish_const)))
         food_replenish_count *= random.uniform(0.9, 1.1)
 

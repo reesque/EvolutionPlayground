@@ -77,10 +77,9 @@ class AgentCard(UIElement):
         super().__init__(window)
         self.idx = idx
         self.sl = sl
-        self.font1 = pygame.font.Font('assets/PressStart2P-Regular.ttf', 21)
-        self.font2 = pygame.font.Font('assets/PressStart2P-Regular.ttf', 12)
-        self.box = pygame.Rect(28 + idx * 330, 120, 280, 350)
-        self.agent_bg = pygame.Rect(135 + idx * 330, 190, 60, 60)
+        self.font1 = pygame.font.Font('assets/PressStart2P-Regular.ttf', 16)
+        self.font2 = pygame.font.Font('assets/PressStart2P-Regular.ttf', 9)
+        self.box = pygame.Rect(28 + idx * 240, 120, 220, 350)
 
         self.current_frame = -1
 
@@ -98,12 +97,12 @@ class AgentCard(UIElement):
         pygame.draw.rect(self.window.screen, (0, 0, 0), self.box.inflate(0, 0), border_radius=5)
         self.window.screen.blit(pygame.transform.scale(
             current_sprite, (current_sprite.get_width() * 3,
-                             current_sprite.get_height() * 3)), (self.box.x + 100, self.box.y + 40))
+                             current_sprite.get_height() * 3)), (self.box.x + 75, self.box.y + 40))
 
         self.window.screen.blit(title, (self.box.x + 25, self.box.y + 180))
-        self.window.screen.blit(speed, (self.box.x + 25, self.box.y + 220))
-        self.window.screen.blit(awareness, (self.box.x + 25, self.box.y + 250))
-        self.window.screen.blit(fitness, (self.box.x + 25, self.box.y + 280))
+        self.window.screen.blit(speed, (self.box.x + 25, self.box.y + 210))
+        self.window.screen.blit(awareness, (self.box.x + 25, self.box.y + 235))
+        self.window.screen.blit(fitness, (self.box.x + 25, self.box.y + 260))
         if is_active:
             pygame.draw.rect(self.window.screen, (180, 0, 0), self.box, 5, border_radius=5)
 
@@ -130,14 +129,14 @@ class AgentCard(UIElement):
         pygame.draw.rect(self.window.screen, (0, 0, 0), self.box.inflate(0, 0), border_radius=5)
         self.window.screen.blit(pygame.transform.scale(
             current_sprite, (current_sprite.get_width() * 3,
-                             current_sprite.get_height() * 3)), (self.box.x + 100, self.box.y + 40))
+                             current_sprite.get_height() * 3)), (self.box.x + 75, self.box.y + 40))
 
         self.window.screen.blit(title, (self.box.x + 25, self.box.y + 180))
-        self.window.screen.blit(speed, (self.box.x + 25, self.box.y + 220))
-        self.window.screen.blit(awareness, (self.box.x + 25, self.box.y + 250))
+        self.window.screen.blit(speed, (self.box.x + 25, self.box.y + 210))
+        self.window.screen.blit(awareness, (self.box.x + 25, self.box.y + 235))
         if is_mutate:
             pygame.draw.rect(self.window.screen, (255, 255, 0), self.box, 5, border_radius=5)
-            self.window.screen.blit(mutated, (self.box.x + 65, self.box.y + 282))
+            self.window.screen.blit(mutated, (self.box.x + 55, self.box.y + 282))
         else:
             pygame.draw.rect(self.window.screen, (200, 200, 200), self.box, 5, border_radius=5)
 
@@ -157,11 +156,11 @@ class ParentsSelection(UIElement):
 
         self.random_btn = Button(window, 375, 510, 115, 40, 'Random', 15, (13, 13))
         self.confirm_btn = Button(window, 505, 510, 115, 40, 'Confirm', 15, (13, 13))
-        self.card = [AgentCard(window, sl, 0), AgentCard(window, sl, 1), AgentCard(window, sl, 2)]
-        self.active = [False, False, False]
+        self.card = [AgentCard(window, sl, c) for c in range(4)]
+        self.active = [False for _ in range(4)]
 
     def reset(self):
-        self.active = [False, False, False]
+        self.active = [False for _ in range(4)]
 
     def render(self, parents: list[Agent], callback):
         for event in pygame.event.get():
@@ -201,7 +200,7 @@ class Offspring(UIElement):
         self.title = self.font.render('Result Offsprings', True, (0, 0, 0))
 
         self.confirm_btn = Button(window, 455, 510, 85, 40, 'Okay', 15, (13, 13))
-        self.card = [AgentCard(window, sl, 0), AgentCard(window, sl, 1), AgentCard(window, sl, 2)]
+        self.card = [AgentCard(window, sl, c) for c in range(4)]
 
     def render(self, offsprings: list[(Agent, bool, int, int)], callback):
         for event in pygame.event.get():
