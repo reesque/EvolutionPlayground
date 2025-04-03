@@ -6,20 +6,20 @@ import numpy as np
 
 
 class EntitySprite(Enum):
-    CHICKEN = 0
-    CRAB = 1
-    TOAD = 2
-    PIG = 3
-    GOOSE = 4
-    FROG = 5
-    BOAR = 6
-    CAT = 7
-    SHEEP = 8
-    TURTLE = 9
-    FOX = 10
-    PORCUPINE = 11
-    SKUNK = 12
-    WOLF = 13
+    CHICKEN = 'Chicken'
+    CRAB = 'Crab'
+    TOAD = 'Toad'
+    PIG = 'Pig'
+    GOOSE = 'Goose'
+    FROG = 'Frog'
+    BOAR = 'Boar'
+    CAT = 'Cat'
+    SHEEP = 'Sheep'
+    TURTLE = 'Turtle'
+    FOX = 'Fox'
+    PORCUPINE = 'Porcupine'
+    SKUNK = 'Skunk'
+    WOLF = 'Wolf'
 
     def get_path(self):
         return f"{self.name.capitalize()}.gif"
@@ -33,7 +33,7 @@ class SpriteLoader:
         for _, item in enumerate(EntitySprite):
             gif = Image.open(f'assets/Entity/{item.get_path()}')
 
-            frames = [pygame.image.fromstring(frame.convert("RGBA").tobytes(), frame.size, "RGBA")
+            frames = [pygame.image.frombytes(frame.convert("RGBA").tobytes(), frame.size, "RGBA")
                       for frame in ImageSequence.Iterator(gif)]
 
             frames = [pygame.transform.scale(frame, (frame.get_width() * 1.5, frame.get_height() * 1.5))
@@ -45,13 +45,13 @@ class SpriteLoader:
         self.tile_sprite = []
         for i in range(1, 5):
             tile = Image.open(f'assets/Tile/Tile{i}.png')
-            self.tile_sprite.append(pygame.image.fromstring(tile.convert("RGBA").tobytes(), tile.size, "RGBA"))
+            self.tile_sprite.append(pygame.image.frombytes(tile.convert("RGBA").tobytes(), tile.size, "RGBA"))
 
         # Food
         self.food_sprite = []
         for i in range(1, 7):
-            tile = Image.open(f'assets/Food/Food{i}.png')
-            self.food_sprite.append(pygame.image.fromstring(tile.convert("RGBA").tobytes(), tile.size, "RGBA"))
+            food = Image.open(f'assets/Food/Food{i}.png')
+            self.food_sprite.append(pygame.image.frombytes(food.convert("RGBA").tobytes(), food.size, "RGBA"))
 
     def get_entity_sprite_at_frame(self, sprite, frame):
         return self.entity_sprite[sprite.name][frame]

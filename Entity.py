@@ -5,6 +5,7 @@ from App import Window
 import random
 from SpriteProcessor import *
 
+
 class Entity:
     def __init__(self, window: Window, sl: SpriteLoader):
         self.window = window
@@ -29,8 +30,8 @@ class Agent(Entity):
         self.eaten = 0
 
         # Sprite vars
-        self.current_frame = 0
         self.sprite = sprite
+        self.current_frame = random.randint(0, self.sl.get_num_frame_in_entity_sprite(self.sprite) - 1)
 
         self._pick_direction()
 
@@ -59,7 +60,7 @@ class Agent(Entity):
                     if (self.position.x <= 0
                             or self.position.x >= self.window.width
                             or self.position.y <= 0
-                            or self.position.y >= self.window.height):
+                            or self.position.y >= self.window.height - 50):
                         self._pick_direction()
 
                     self.position.x += self.speed * self.direction[0]
@@ -67,7 +68,7 @@ class Agent(Entity):
 
             # Clamp to screen edge
             self.position.x = max(0, min(self.window.width, self.position.x))
-            self.position.y = max(0, min(self.window.height, self.position.y))
+            self.position.y = max(0, min(self.window.height - 50, self.position.y))
 
             # Cost to move
             speed_cost = 0.1 * self.speed
@@ -89,7 +90,7 @@ class Agent(Entity):
 
         # Render
         self.window.screen.blit(current_sprite, (self.position.x - (sprite_width / 2), self.position.y - (sprite_height / 2)))
-        pygame.draw.circle(self.window.screen, (255, 0, 0, 10), (self.position.x, self.position.y), self.size, width=2)
+        pygame.draw.circle(self.window.screen, (180, 0, 0), (self.position.x, self.position.y), self.size, width=2)
 
         # Clock tick
         if pygame.time.get_ticks() % 10 == 0:
@@ -103,11 +104,11 @@ class Agent(Entity):
 class Food(Entity):
     def __init__(self, window: Window, sl: SpriteLoader):
         super().__init__(window, sl)
-        self.size = 4
-        self.position = Position(random.randint(8, self.window.width - 8), random.randint(8, self.window.height - 8))
+        self.size = 6
+        self.position = Position(random.randint(8, self.window.width - 8), random.randint(8, self.window.height - 58))
         self.sprite_idx = sl.get_random_food_index()
 
     def draw(self):
         sprite = self.sl.get_food_sprite(self.sprite_idx)
         sprite_width, sprite_height = sprite.get_size()
-        self.window.screen.blit(sprite, (self.position.x - (sprite_width / 2), self.position.y - (sprite_height / 2)))
+        self.window.screen.blit(sprite, (self.position.x - (sprite_width // 2), self.position.y - (sprite_height // 2)))

@@ -4,15 +4,15 @@ from SpriteProcessor import SpriteLoader
 
 
 class Window:
-    def __init__(self, sl: SpriteLoader, width: int = 800, height: int = 600, fps: int = 60, r: int = 50, g: int = 50, b: int = 50):
-        self.width = width
-        self.height = height
+    def __init__(self, sl: SpriteLoader, fps: int = 60, r: int = 50, g: int = 50, b: int = 50):
+        self.width = 1000
+        self.height = 600
         self.fps = fps
         self.clock = pygame.time.Clock()
         self.bg_color = (r, g, b)
         self.sl = sl
 
-        self.screen = pygame.display.set_mode((width, height))
+        self.screen = pygame.display.set_mode((self.width, self.height), pygame.SCALED | pygame.HWACCEL)
         pygame.display.set_caption("Evolution Playground")
 
         self.tile_ground = []

@@ -1,11 +1,12 @@
 import math
 
-import numpy as np
 from tabulate import tabulate
 from App import Window
 from Entity import Agent, Food
 from SpriteProcessor import *
 import random
+
+from UIElement import *
 
 
 class Simulation:
@@ -24,61 +25,58 @@ class Simulation:
 
         self.sprite = EntitySprite.SHEEP
         self.agents = [Agent(self.window, self.sl, self.sprite) for _ in range(self.initial_population)]
+        self.foods = [Food(self.window, self.sl) for _ in range(self.initial_food_amount)]
         self.max_offspring = 3
+
+        self.sim_state = 1
+        self.ui_parent1, self.ui_parent2 = None, None
+        self.ui_offspring_confirmed = False
+        self.is_auto = False
+
+        # UI Elements
+        self.ui_pause_box = PauseBox(self.window)
+        self.ui_sim_bar = SimulationInformation(self.window)
+        self.ui_agent_card = ParentsSelection(self.window, self.sl)
+        self.ui_offspring_card = Offspring(self.window, self.sl)
 
         self.run()
         pygame.quit()
 
-    def generate_report(self, generation: int):
-        print("Generation {} Report:".format(generation))
-        headers = ["Size", "Speed", "Fitness"]
-        data = []
+    def run_simulation(self, is_paused: bool):
+        agents_moved = 0
+
+        if len(self.foods) == 0:
+            return True
+
+        # Update agents
         for agent in self.agents:
-            data.append([agent.size, agent.speed, agent.eaten])
+            if not is_paused and agent.move(self.foods.copy()):
+                agents_moved = agents_moved + 1
 
-        print(tabulate(data, headers=headers))
+            agent.draw()
 
-    def run_simulation(self, generation: int, food_list: list):
-        running = True
-        while running:
-            agents_moved = 0
-            if len(food_list) == 0:
-                running = False
-                #self.generate_report(generation)
-                self.window.clear()
-
-            self.window.clear()
-
-            # Update agents
+        # Food be eaten
+        if not is_paused:
             for agent in self.agents:
-                if agent.move(food_list.copy()):
-                    agents_moved = agents_moved + 1
-
-                agent.draw()
-
-            # Food be eaten
-            for agent in self.agents:
-                for food in food_list.copy():
+                for food in self.foods.copy():
                     # Euclidean dist
                     dist = math.sqrt((agent.position.x - food.position.x) ** 2 +
                                      (agent.position.y - food.position.y) ** 2)
 
                     if dist <= (food.size / 2):
                         agent.eaten = agent.eaten + 1
-                        food_list.remove(food)
+                        self.foods.remove(food)
                         break
 
-            # Update Food
-            for food in food_list:
-                food.draw()
+        # Update Food
+        for food in self.foods:
+            food.draw()
 
-            # Termination if all out of energy
-            if agents_moved == 0:
-                running = False
-                #self.generate_report(generation)
-                self.window.clear()
+        # Termination if all out of energy
+        if agents_moved == 0 and not is_paused:
+            return True
 
-            self.window.tick()
+        return False
 
     def blend_crossover(self, parent1: Agent, parent2: Agent):
         alpha = random.uniform(0.3, 0.7)
@@ -87,61 +85,138 @@ class Simulation:
         return Agent(self.window, self.sl, self.sprite, speed=child_speed, size=child_size)
 
     def mutate(self, agent: Agent, mutation_rate: float = 0.1, mutation_strength: float = 0.5):
-        if random.random() < mutation_rate:
-            agent.speed += random.uniform(-mutation_strength, mutation_strength)
-            agent.size += random.uniform(-mutation_strength, mutation_strength)
+        speed_mutation = 0
+        size_mutation = 0
+        mutated = random.random() < mutation_rate
+        if mutated:
+            speed_mutation = random.uniform(-mutation_strength, mutation_strength)
+            size_mutation = random.uniform(-mutation_strength, mutation_strength)
+            agent.speed += speed_mutation
+            agent.size += size_mutation
 
-    def child_policy_distribution(self, fitness, scale_factor=1.5):
-        child_choices = np.linspace(0, self.max_offspring, self.max_offspring, dtype=int)
-        scaled_weights = np.exp(scale_factor * (fitness / np.max([fitness, 1])) * child_choices)
-        probabilities = scaled_weights / np.sum(scaled_weights)
+        return mutated, speed_mutation, size_mutation
+
+    def child_policy_distribution(self, fitness, scale_factor=3):
+        child_choices = np.linspace(1, self.max_offspring, self.max_offspring, dtype=int)
+
+        distances = np.abs(child_choices - fitness / (self.max_offspring + 1))
+        weights = np.exp(-distances)
+        probabilities = weights / np.sum(weights)
 
         return child_choices, probabilities
 
+    def reset(self):
+        self.agents = [Agent(self.window, self.sl, self.sprite) for _ in range(self.initial_population)]
+        self.foods = [Food(self.window, self.sl) for _ in range(self.initial_food_amount)]
+
+    def choose_parents_callback(self, p1: Agent, p2: Agent, is_auto: bool):
+        self.ui_parent1, self.ui_parent2 = p1, p2
+        self.is_auto = is_auto
+
+    def offspring_confirm_callback(self):
+        self.ui_offspring_confirmed = True
+
+    def next_generation(self):
+        i = 0
+        while i < len(self.agents):
+            # Check if agent is fit enough
+            if self.agents[i].eaten == 0:
+                self.agents.pop(i)
+                continue
+
+            i += 1
+
+        # Species died out
+        if len(self.agents) == 0:
+            self.sim_state = 2
+            self.reset()
+            return
+
+        # Child policy
+        agents_copy = self.agents.copy()
+        self.agents = []
+        while len(agents_copy) > 1:
+            if not self.is_auto:
+                card_choices = np.random.choice(agents_copy, min(len(agents_copy), 3), replace=False).tolist()
+                self.ui_agent_card.reset()
+                self.ui_parent1, self.ui_parent2 = None, None
+
+                while self.ui_parent1 is None or self.ui_parent2 is None:
+                    self.window.clear()
+                    self.ui_agent_card.render(card_choices, self.choose_parents_callback)
+                    self.window.tick()
+
+                agents_copy.remove(self.ui_parent1)
+                agents_copy.remove(self.ui_parent2)
+            else:
+                self.ui_parent1 = np.random.choice(agents_copy)
+                agents_copy.remove(self.ui_parent1)
+                self.ui_parent2 = np.random.choice(agents_copy)
+                agents_copy.remove(self.ui_parent2)
+
+            child_choices, child_policy = self.child_policy_distribution(self.ui_parent1.eaten + self.ui_parent2.eaten)
+            offsprings = []
+            for _ in range(np.random.choice(child_choices, p=child_policy)):
+                child = self.blend_crossover(self.ui_parent1, self.ui_parent2)
+                mutated, speed_mutation, size_mutation = self.mutate(child)
+                offsprings.append((child, mutated, speed_mutation, size_mutation))
+                self.agents.append(child)
+
+            if not self.is_auto:
+                self.ui_offspring_confirmed = False
+                while not self.ui_offspring_confirmed:
+                    self.window.clear()
+                    self.ui_offspring_card.render(offsprings, self.offspring_confirm_callback)
+                    self.window.tick()
+
+        # Spawn new food
+        food_replenish_count = ((self.initial_food_amount - len(self.foods)) * self.food_replenish_const /
+                                (max(1, len(self.agents) - self.food_replenish_const)))
+        food_replenish_count *= random.uniform(0.9, 1.1)
+
+        for _ in range(int(food_replenish_count)):
+            self.foods.append(Food(self.window, self.sl))
+
+        self.sim_state = 1
+        self.is_auto = False
+
     def run(self):
-        foods = [Food(self.window, self.sl) for _ in range(self.initial_food_amount)]
         gen = 0
-        while True:
-            if not gen == 0:
-                i = 0
-                while i < len(self.agents):
-                    # Check if agent is fit enough
-                    if self.agents[i].eaten == 0:
-                        self.agents.pop(i)
-                        continue
+        running = True
 
-                    i += 1
+        # Main loop
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
 
-                # Species died out
-                if len(self.agents) == 0:
-                    break
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        running = False
 
-                # Child policy
-                agents_copy = self.agents.copy()
-                self.agents = []
-                while len(agents_copy) > 1:
-                    parent1 = np.random.choice(agents_copy)
-                    agents_copy.remove(parent1)
-                    parent2 = np.random.choice(agents_copy)
-                    agents_copy.remove(parent2)
+                    if event.key == pygame.K_SPACE:
+                        if self.sim_state == 1:
+                            self.sim_state = 2
+                        elif self.sim_state == 2:
+                            self.sim_state = 1
 
-                    child_choices, child_policy = self.child_policy_distribution(parent1.eaten + parent2.eaten)
-                    for _ in range(np.random.choice(child_choices, p=child_policy)):
-                        child = self.blend_crossover(parent1, parent2)
-                        self.mutate(child)
-                        self.agents.append(child)
+            if self.sim_state == 0 and not gen == 0:
+                self.next_generation()
 
-                # Spawn new food
-                food_replenish_count = (self.initial_food_amount * self.food_replenish_const /
-                                        (max(1, len(self.agents) - self.food_replenish_const)))
-                food_replenish_count *= random.uniform(0.9, 1.1)
-                print(food_replenish_count)
+            if self.sim_state == 1 or self.sim_state == 2:
+                self.window.clear()
+                done = self.run_simulation(self.sim_state == 2)
 
-                for _ in range(int(food_replenish_count)):
-                    foods.append(Food(self.window, self.sl))
+                if self.sim_state == 2:
+                    self.ui_pause_box.render()
 
-            self.run_simulation(gen, foods)
-            gen += 1
+                if done:
+                    self.sim_state = 0
+                    gen += 1
+
+                self.ui_sim_bar.render(gen, len(self.agents), len(self.foods))
+
+            self.window.tick()
 
 
 if __name__ == "__main__":
