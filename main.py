@@ -1,120 +1,148 @@
 import math
-import random
 
+import numpy as np
 from tabulate import tabulate
-import pygame
 from App import Window
 from Entity import Agent, Food
-
-# Initialize Pygame
-pygame.init()
-window = Window()
-
-# Params
-generations = 10
-food_amount = 100
-population = 10
-
-agents = [Agent(window) for _ in range(population)]
+from SpriteProcessor import *
+import random
 
 
-def generate_report(generation: int):
-    print("Generation {} Report:".format(generation))
-    headers = ["Size", "Speed", "Fitness"]
-    data = []
-    for agent in agents:
-        data.append([agent.size, agent.speed, agent.eaten])
+class Simulation:
+    def __init__(self):
+        # Backend services
+        self.sl = SpriteLoader()
 
-    print(tabulate(data, headers=headers))
+        # Initialize Pygame
+        pygame.init()
+        self.window = Window(self.sl)
 
+        # Params
+        self.initial_food_amount = 100
+        self.initial_population = 10
+        self.food_replenish_const = 1
 
-def run_simulation(generation: int, foods: list):
-    running = True
-    while running:
-        agents_moved = 0
-        if len(foods) == 0:
-            generate_report(generation)
-            window.clear()
-            break
+        self.sprite = EntitySprite.SHEEP
+        self.agents = [Agent(self.window, self.sl, self.sprite) for _ in range(self.initial_population)]
+        self.max_offspring = 3
 
-        window.clear()
+        self.run()
+        pygame.quit()
 
-        # Update agents
-        for agent in agents:
-            if agent.move(foods.copy()):
-                agents_moved = agents_moved + 1
+    def generate_report(self, generation: int):
+        print("Generation {} Report:".format(generation))
+        headers = ["Size", "Speed", "Fitness"]
+        data = []
+        for agent in self.agents:
+            data.append([agent.size, agent.speed, agent.eaten])
 
-            agent.draw()
+        print(tabulate(data, headers=headers))
 
-        # Food be eaten
-        for agent in agents:
-            for food in foods.copy():
-                # Euclidean dist
-                dist = math.sqrt((agent.position.x - food.position.x) ** 2 +
-                                 (agent.position.y - food.position.y) ** 2)
+    def run_simulation(self, generation: int, food_list: list):
+        running = True
+        while running:
+            agents_moved = 0
+            if len(food_list) == 0:
+                running = False
+                #self.generate_report(generation)
+                self.window.clear()
 
-                if dist <= (food.size / 2):
-                    agent.eaten = agent.eaten + 1
-                    foods.remove(food)
+            self.window.clear()
+
+            # Update agents
+            for agent in self.agents:
+                if agent.move(food_list.copy()):
+                    agents_moved = agents_moved + 1
+
+                agent.draw()
+
+            # Food be eaten
+            for agent in self.agents:
+                for food in food_list.copy():
+                    # Euclidean dist
+                    dist = math.sqrt((agent.position.x - food.position.x) ** 2 +
+                                     (agent.position.y - food.position.y) ** 2)
+
+                    if dist <= (food.size / 2):
+                        agent.eaten = agent.eaten + 1
+                        food_list.remove(food)
+                        break
+
+            # Update Food
+            for food in food_list:
+                food.draw()
+
+            # Termination if all out of energy
+            if agents_moved == 0:
+                running = False
+                #self.generate_report(generation)
+                self.window.clear()
+
+            self.window.tick()
+
+    def blend_crossover(self, parent1: Agent, parent2: Agent):
+        alpha = random.uniform(0.3, 0.7)
+        child_speed = alpha * parent1.speed + (1 - alpha) * parent2.speed
+        child_size = alpha * parent1.size + (1 - alpha) * parent2.size
+        return Agent(self.window, self.sl, self.sprite, speed=child_speed, size=child_size)
+
+    def mutate(self, agent: Agent, mutation_rate: float = 0.1, mutation_strength: float = 0.5):
+        if random.random() < mutation_rate:
+            agent.speed += random.uniform(-mutation_strength, mutation_strength)
+            agent.size += random.uniform(-mutation_strength, mutation_strength)
+
+    def child_policy_distribution(self, fitness, scale_factor=1.5):
+        child_choices = np.linspace(0, self.max_offspring, self.max_offspring, dtype=int)
+        scaled_weights = np.exp(scale_factor * (fitness / np.max([fitness, 1])) * child_choices)
+        probabilities = scaled_weights / np.sum(scaled_weights)
+
+        return child_choices, probabilities
+
+    def run(self):
+        foods = [Food(self.window, self.sl) for _ in range(self.initial_food_amount)]
+        gen = 0
+        while True:
+            if not gen == 0:
+                i = 0
+                while i < len(self.agents):
+                    # Check if agent is fit enough
+                    if self.agents[i].eaten == 0:
+                        self.agents.pop(i)
+                        continue
+
+                    i += 1
+
+                # Species died out
+                if len(self.agents) == 0:
                     break
 
-        # Update Food
-        for food in foods:
-            food.draw()
+                # Child policy
+                agents_copy = self.agents.copy()
+                self.agents = []
+                while len(agents_copy) > 1:
+                    parent1 = np.random.choice(agents_copy)
+                    agents_copy.remove(parent1)
+                    parent2 = np.random.choice(agents_copy)
+                    agents_copy.remove(parent2)
 
-        # Termination if all out of energy
-        if agents_moved == 0:
-            generate_report(generation)
-            window.clear()
-            break
+                    child_choices, child_policy = self.child_policy_distribution(parent1.eaten + parent2.eaten)
+                    for _ in range(np.random.choice(child_choices, p=child_policy)):
+                        child = self.blend_crossover(parent1, parent2)
+                        self.mutate(child)
+                        self.agents.append(child)
 
-        window.tick()
+                # Spawn new food
+                food_replenish_count = (self.initial_food_amount * self.food_replenish_const /
+                                        (max(1, len(self.agents) - self.food_replenish_const)))
+                food_replenish_count *= random.uniform(0.9, 1.1)
+                print(food_replenish_count)
 
+                for _ in range(int(food_replenish_count)):
+                    foods.append(Food(self.window, self.sl))
 
-def parent_selection():
-    total_fitness = sum(agent.eaten for agent in agents)
-    pick = random.uniform(0, total_fitness)
-
-    current = 0
-    for agent in agents:
-        current += agent.eaten
-        if current >= pick:
-            return agent
-
-
-def blend_crossover(parent1: Agent, parent2: Agent):
-    alpha = random.uniform(0.3, 0.7)
-    child_speed = alpha * parent1.speed + (1 - alpha) * parent2.speed
-    child_size = alpha * parent1.size + (1 - alpha) * parent2.size
-    return Agent(window, speed=child_speed, size=child_size)
+            self.run_simulation(gen, foods)
+            gen += 1
 
 
-def mutate(agent: Agent, mutation_rate: float = 0.1, mutation_strength: float = 0.5):
-    if random.random() < mutation_rate:
-        agent.speed += random.uniform(-mutation_strength, mutation_strength)
-        agent.size += random.uniform(-mutation_strength, mutation_strength)
-
-
-for gen in range(generations):
-    if not gen == 0:
-        offspring = []
-
-        major = math.floor(population * 0.8)
-        minor = population - major
-
-        for _ in range(major):
-            parent1 = parent_selection()
-            parent2 = parent_selection()
-            child = blend_crossover(parent1, parent2)
-            mutate(child)
-            offspring.append(child)
-
-        for _ in range(minor):
-            offspring.append(Agent(window))
-
-        agents = offspring
-
-    foods = [Food(window) for _ in range(food_amount)]
-    run_simulation(gen, foods)
-
-pygame.quit()
+if __name__ == "__main__":
+    Simulation()
