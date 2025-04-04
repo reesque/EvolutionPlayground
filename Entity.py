@@ -12,10 +12,92 @@ class Entity:
         self.sl = sl
 
 
-class Agent(Entity):
-    def __init__(self, window: Window, sl: SpriteLoader, sprite: EntitySprite, speed: int = -1, size: int = -1):
+class MenuAgent(Entity):
+    def __init__(self, window: Window, sl: SpriteLoader, sprite: EntitySprite, sprite_scale: float, callback,
+                 bound: tuple[tuple[int, int], tuple[int, int]] = None):
         super().__init__(window, sl)
-        self.position = Position(self.window.width // 2, self.window.height // 2)
+
+        self.bound_min = (0, 0)
+        self.bound_max = (self.window.width, self.window.height)
+        if bound is not None:
+            self.bound_min = bound[0]
+            self.bound_max = bound[1]
+
+        self.sprite_scale = sprite_scale
+        self.position = Position(self.bound_max[0] // 2, self.bound_max[1] // 2)
+
+        self.speed = 2
+        self.callback = callback
+
+        # Sprite vars
+        self.sprite = sprite
+        self.current_frame = random.randint(0, self.sl.get_num_frame_in_entity_sprite(self.sprite) - 1)
+
+        self._pick_direction()
+
+    def move(self):
+        # Move
+        if (self.position.x <= self.bound_min[0]
+                or self.position.x >= self.bound_max[0]
+                or self.position.y <= self.bound_min[1]
+                or self.position.y >= self.bound_max[1]):
+            self._pick_direction()
+
+        self.position.x += self.speed * self.direction[0]
+        self.position.y += self.speed * self.direction[1]
+
+        # Clamp to screen edge
+        self.position.x = max(self.bound_min[0], min(self.bound_max[0], self.position.x))
+        self.position.y = max(self.bound_min[1], min(self.bound_max[1], self.position.y))
+
+    def draw(self, events):
+        # Sprite orientation
+        current_sprite = self.sl.get_entity_sprite_at_frame(self.sprite, self.current_frame)
+        current_sprite = pygame.transform.scale(current_sprite,
+                                                (current_sprite.get_width() * self.sprite_scale,
+                                                 current_sprite.get_height() * self.sprite_scale))
+        if self.direction[0] < 0:
+            current_sprite = pygame.transform.flip(current_sprite, True, False)
+
+        # Size for translation
+        sprite_width, sprite_height = current_sprite.get_size()
+
+        # Check on-click
+        for event in events:
+            if event.type == pygame.MOUSEBUTTONUP:
+                x, y = event.pos
+                if (self.position.x - 20 <= x <= self.position.x + sprite_width + 20
+                        and self.position.y - 20 <= y <= self.position.y + sprite_height + 20):
+                    sp = list(EntitySprite)
+                    index = (sp.index(self.sprite) + 1) % len(sp)
+                    self.sprite = sp[index]
+                    self.callback(self.sprite)
+
+        # Render
+        self.window.screen.blit(current_sprite,
+                                (self.position.x - (sprite_width / 2), self.position.y - (sprite_height / 2)))
+
+        # Clock tick
+        if pygame.time.get_ticks() % 10 == 0:
+            self.current_frame = pygame.time.get_ticks() % self.sl.get_num_frame_in_entity_sprite(self.sprite)
+
+    def _pick_direction(self):
+        angle = random.uniform(0, 2 * math.pi)
+        self.direction = (math.cos(angle), math.sin(angle))
+
+
+class Agent(Entity):
+    def __init__(self, window: Window, sl: SpriteLoader, sprite: EntitySprite, speed: int = -1, size: int = -1,
+                 bound: tuple[tuple[int, int], tuple[int, int]] = None):
+        super().__init__(window, sl)
+
+        self.bound_min = (0, 0)
+        self.bound_max = (self.window.width, self.window.height)
+        if bound is not None:
+            self.bound_min = bound[0]
+            self.bound_max = bound[1]
+
+        self.position = Position(self.bound_max[0] // 2, self.bound_max[1] // 2)
 
         self.size = round(size, 2)
         if size < 1:
@@ -34,6 +116,9 @@ class Agent(Entity):
         self.current_frame = random.randint(0, self.sl.get_num_frame_in_entity_sprite(self.sprite) - 1)
 
         self._pick_direction()
+
+    def change_sprite(self, sprite):
+        self.sprite = sprite
 
     def move(self, foods: list):
         if self.energy > 0:
@@ -57,18 +142,18 @@ class Agent(Entity):
                     self.position.x += self.speed * (direction_x / distance_to_food)
                     self.position.y += self.speed * (direction_y / distance_to_food)
                 else:
-                    if (self.position.x <= 0
-                            or self.position.x >= self.window.width
-                            or self.position.y <= 0
-                            or self.position.y >= self.window.height - 50):
+                    if (self.position.x <= self.bound_min[0]
+                            or self.position.x >= self.bound_max[0]
+                            or self.position.y <= self.bound_min[1]
+                            or self.position.y >= self.bound_max[1] - 50):
                         self._pick_direction()
 
                     self.position.x += self.speed * self.direction[0]
                     self.position.y += self.speed * self.direction[1]
 
             # Clamp to screen edge
-            self.position.x = max(0, min(self.window.width, self.position.x))
-            self.position.y = max(0, min(self.window.height - 50, self.position.y))
+            self.position.x = max(self.bound_min[0], min(self.bound_max[0], self.position.x))
+            self.position.y = max(self.bound_min[1], min(self.bound_max[1] - 50, self.position.y))
 
             # Cost to move
             speed_cost = 0.1 * self.speed
@@ -89,7 +174,8 @@ class Agent(Entity):
         sprite_width, sprite_height = current_sprite.get_size()
 
         # Render
-        self.window.screen.blit(current_sprite, (self.position.x - (sprite_width / 2), self.position.y - (sprite_height / 2)))
+        self.window.screen.blit(current_sprite,
+                                (self.position.x - (sprite_width / 2), self.position.y - (sprite_height / 2)))
         pygame.draw.circle(self.window.screen, (180, 0, 0), (self.position.x, self.position.y), self.size, width=2)
 
         # Clock tick

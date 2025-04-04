@@ -1,10 +1,8 @@
 import math
 
-from tabulate import tabulate
 from App import Window
-from Entity import Agent, Food
+from Entity import Food
 from SpriteProcessor import *
-import random
 
 from UIElement import *
 
@@ -14,7 +12,10 @@ class GameState(Enum):
     GAME_OVER = 1
     SIM_RUNNING = 2
     SIM_PAUSED = 3
-    GENERATION_SHIFT = 4
+    GENERATION_EVAL = 4
+    PARENTS_SELECTION = 5
+    OFFSPRING_OVERVIEW = 6
+
 
 class Simulation:
     def __init__(self):
@@ -29,22 +30,33 @@ class Simulation:
         self.initial_food_amount = 100
         self.initial_population = 10
         self.food_replenish_const = 1
-
-        self.sprite = EntitySprite.SHEEP
-        self.agents = [Agent(self.window, self.sl, self.sprite) for _ in range(self.initial_population)]
-        self.foods = [Food(self.window, self.sl) for _ in range(self.initial_food_amount)]
+        self.mutation_chance = 0.1
+        self.mutation_strength = 0.5
         self.max_offspring = 4
 
-        self.sim_state = 1
+        # Game states
+        self.game_state = GameState.MAIN_MENU
         self.ui_parent1, self.ui_parent2 = None, None
         self.ui_offspring_confirmed = False
         self.is_auto = False
+        self.generation = 0
+        self.prev_gen = None
+        self.offsprings = None
+        self.card_choices = None
+        self.sprite = EntitySprite.CHICKEN
+        self.agents = [Agent(self.window, self.sl, self.sprite) for _ in range(self.initial_population)]
+        self.foods = [Food(self.window, self.sl) for _ in range(self.initial_food_amount)]
 
         # UI Elements
         self.ui_pause_box = PauseBox(self.window)
-        self.ui_sim_bar = SimulationInformation(self.window)
+        self.ui_sim_bar = SimulationInformation(self.window, self.ui_callback_back_to_menu)
         self.ui_agent_card = ParentsSelection(self.window, self.sl)
         self.ui_offspring_card = Offspring(self.window, self.sl)
+        self.ui_main_menu = MainMenu(self.window, self.sl, self.ui_callback_init_population_changed,
+                                     self.ui_callback_init_food_changed, self.ui_callback_sprite_changed,
+                                     self.ui_callback_game_reset, self.ui_callback_mutation_chance_changed,
+                                     self.ui_callback_mutation_strength_changed)
+        self.ui_game_over = GameOver(self.window, self.ui_callback_back_to_menu)
 
         self.run()
         pygame.quit()
@@ -91,13 +103,13 @@ class Simulation:
         child_size = alpha * parent1.size + (1 - alpha) * parent2.size
         return Agent(self.window, self.sl, self.sprite, speed=child_speed, size=child_size)
 
-    def mutate(self, agent: Agent, mutation_rate: float = 0.1, mutation_strength: float = 0.5):
+    def mutate(self, agent: Agent):
         speed_mutation = 0
         size_mutation = 0
-        mutated = random.random() < mutation_rate
+        mutated = random.random() < self.mutation_chance
         if mutated:
-            speed_mutation = random.uniform(-mutation_strength, mutation_strength)
-            size_mutation = random.uniform(-mutation_strength, mutation_strength)
+            speed_mutation = random.uniform(-self.mutation_strength, self.mutation_strength)
+            size_mutation = random.uniform(-self.mutation_strength, self.mutation_strength)
             agent.speed += speed_mutation
             agent.size += size_mutation
 
@@ -112,18 +124,52 @@ class Simulation:
 
         return child_choices, probabilities
 
-    def reset(self):
-        self.agents = [Agent(self.window, self.sl, self.sprite) for _ in range(self.initial_population)]
-        self.foods = [Food(self.window, self.sl) for _ in range(self.initial_food_amount)]
+    def next_generation(self, events):
+        if len(self.prev_gen) > 1:
+            # Child policy
+            if not self.is_auto:
+                if self.card_choices is None:
+                    self.card_choices = np.random.choice(self.prev_gen, min(len(self.prev_gen), 4), replace=False).tolist()
+                    self.ui_parent1, self.ui_parent2 = None, None
 
-    def choose_parents_callback(self, p1: Agent, p2: Agent, is_auto: bool):
-        self.ui_parent1, self.ui_parent2 = p1, p2
-        self.is_auto = is_auto
+                if self.ui_parent1 is None or self.ui_parent2 is None:
+                    self.window.clear()
+                    self.ui_agent_card.render(self.card_choices, events, self.ui_callback_parents_chose)
+                    self.window.tick()
+            else:
+                self.ui_parent1 = np.random.choice(self.prev_gen)
+                self.prev_gen.remove(self.ui_parent1)
+                self.ui_parent2 = np.random.choice(self.prev_gen)
+                self.prev_gen.remove(self.ui_parent2)
 
-    def offspring_confirm_callback(self):
-        self.ui_offspring_confirmed = True
+            if self.ui_parent1 is not None and self.ui_parent2 is not None:
+                if not self.is_auto:
+                    self.prev_gen.remove(self.ui_parent1)
+                    self.prev_gen.remove(self.ui_parent2)
 
-    def next_generation(self):
+                child_choices, child_policy = self.child_policy_distribution(self.ui_parent1.eaten + self.ui_parent2.eaten)
+                self.offsprings = []
+                for _ in range(np.random.choice(child_choices, p=child_policy)):
+                    child = self.blend_crossover(self.ui_parent1, self.ui_parent2)
+                    mutated, speed_mutation, size_mutation = self.mutate(child)
+                    self.offsprings.append((child, mutated, speed_mutation, size_mutation))
+                    self.agents.append(child)
+
+                self.ui_offspring_confirmed = False
+                self.game_state = GameState.OFFSPRING_OVERVIEW
+        else:
+            # Spawn new food
+            food_replenish_count = (self.initial_food_amount  * self.food_replenish_const /
+                                    (max(1, len(self.agents) - self.food_replenish_const)))
+            food_replenish_count *= random.uniform(0.9, 1.1)
+
+            for _ in range(int(food_replenish_count)):
+                self.foods.append(Food(self.window, self.sl))
+
+            self.game_state = GameState.SIM_RUNNING
+            self.is_auto = False
+
+    def generation_eval(self):
         i = 0
         while i < len(self.agents):
             # Check if agent is fit enough
@@ -135,95 +181,108 @@ class Simulation:
 
         # Species died out
         if len(self.agents) == 0:
-            self.sim_state = 2
-            self.reset()
+            self.game_state = GameState.GAME_OVER
             return
 
-        # Child policy
-        agents_copy = self.agents.copy()
+        self.prev_gen = self.agents.copy()
         self.agents = []
-        while len(agents_copy) > 1:
-            if not self.is_auto:
-                card_choices = np.random.choice(agents_copy, min(len(agents_copy), 4), replace=False).tolist()
-                self.ui_agent_card.reset()
-                self.ui_parent1, self.ui_parent2 = None, None
-
-                while self.ui_parent1 is None or self.ui_parent2 is None:
-                    self.window.clear()
-                    self.ui_agent_card.render(card_choices, self.choose_parents_callback)
-                    self.window.tick()
-
-                agents_copy.remove(self.ui_parent1)
-                agents_copy.remove(self.ui_parent2)
-            else:
-                self.ui_parent1 = np.random.choice(agents_copy)
-                agents_copy.remove(self.ui_parent1)
-                self.ui_parent2 = np.random.choice(agents_copy)
-                agents_copy.remove(self.ui_parent2)
-
-            child_choices, child_policy = self.child_policy_distribution(self.ui_parent1.eaten + self.ui_parent2.eaten)
-            offsprings = []
-            for _ in range(np.random.choice(child_choices, p=child_policy)):
-                child = self.blend_crossover(self.ui_parent1, self.ui_parent2)
-                mutated, speed_mutation, size_mutation = self.mutate(child)
-                offsprings.append((child, mutated, speed_mutation, size_mutation))
-                self.agents.append(child)
-
-            if not self.is_auto:
-                self.ui_offspring_confirmed = False
-                while not self.ui_offspring_confirmed:
-                    self.window.clear()
-                    self.ui_offspring_card.render(offsprings, self.offspring_confirm_callback)
-                    self.window.tick()
-
-        # Spawn new food
-        food_replenish_count = (self.initial_food_amount  * self.food_replenish_const /
-                                (max(1, len(self.agents) - self.food_replenish_const)))
-        food_replenish_count *= random.uniform(0.9, 1.1)
-
-        for _ in range(int(food_replenish_count)):
-            self.foods.append(Food(self.window, self.sl))
-
-        self.sim_state = 1
-        self.is_auto = False
+        self.game_state = GameState.PARENTS_SELECTION
 
     def run(self):
-        gen = 0
-        running = True
-
         # Main loop
-        while running:
-            for event in pygame.event.get():
+        while True:
+            events = pygame.event.get()
+            for event in events:
                 if event.type == pygame.QUIT:
-                    running = False
+                    pygame.quit()
+                    return
 
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
-                        running = False
+                        pygame.quit()
+                        return
 
                     if event.key == pygame.K_SPACE:
-                        if self.sim_state == 1:
-                            self.sim_state = 2
-                        elif self.sim_state == 2:
-                            self.sim_state = 1
+                        if self.game_state == GameState.SIM_RUNNING:
+                            self.game_state = GameState.SIM_PAUSED
+                        elif self.game_state == GameState.SIM_PAUSED:
+                            self.game_state = GameState.SIM_RUNNING
 
-            if self.sim_state == 0 and not gen == 0:
-                self.next_generation()
-
-            if self.sim_state == 1 or self.sim_state == 2:
+            if self.game_state == GameState.MAIN_MENU:
                 self.window.clear()
-                done = self.run_simulation(self.sim_state == 2)
+                self.ui_main_menu.render(events)
+                self.window.tick()
 
-                if self.sim_state == 2:
+            if self.game_state == GameState.GENERATION_EVAL:
+                self.generation_eval()
+
+            if self.game_state == GameState.PARENTS_SELECTION:
+                self.next_generation(events)
+
+            if self.game_state == GameState.OFFSPRING_OVERVIEW:
+                if not self.is_auto:
+                    if not self.ui_offspring_confirmed:
+                        self.window.clear()
+                        self.ui_offspring_card.render(self.offsprings, events, self.ui_callback_offspring_confirmed)
+                        self.window.tick()
+                    else:
+                        self.game_state = GameState.PARENTS_SELECTION
+                else:
+                    self.game_state = GameState.PARENTS_SELECTION
+
+            if self.game_state == GameState.GAME_OVER:
+                self.window.clear()
+                self.ui_game_over.render(events, self.generation)
+                self.window.tick()
+
+            if self.game_state == GameState.SIM_RUNNING or self.game_state == GameState.SIM_PAUSED:
+                self.window.clear()
+                done = self.run_simulation(self.game_state == GameState.SIM_PAUSED)
+
+                if self.game_state == GameState.SIM_PAUSED:
                     self.ui_pause_box.render()
 
                 if done:
-                    self.sim_state = 0
-                    gen += 1
+                    self.game_state = GameState.GENERATION_EVAL
+                    self.generation += 1
 
-                self.ui_sim_bar.render(gen, len(self.agents), len(self.foods))
+                self.ui_sim_bar.render(events, self.generation, len(self.agents), len(self.foods))
+                self.window.tick()
 
-            self.window.tick()
+    def ui_callback_game_reset(self):
+        self.generation = 0
+        self.prev_gen = []
+        self.offsprings = []
+        self.agents = [Agent(self.window, self.sl, self.sprite) for _ in range(self.initial_population)]
+        self.foods = [Food(self.window, self.sl) for _ in range(self.initial_food_amount)]
+        self.game_state = GameState.SIM_RUNNING
+
+    def ui_callback_parents_chose(self, p1: Agent, p2: Agent, is_auto: bool):
+        self.ui_parent1, self.ui_parent2 = p1, p2
+        self.is_auto = is_auto
+        self.card_choices = None
+        self.ui_agent_card.reset()
+
+    def ui_callback_offspring_confirmed(self):
+        self.ui_offspring_confirmed = True
+
+    def ui_callback_init_population_changed(self, value: int):
+        self.initial_population = int(value)
+
+    def ui_callback_init_food_changed(self, value: int):
+        self.initial_food_amount = int(value)
+
+    def ui_callback_sprite_changed(self, sprite: EntitySprite):
+        self.sprite = sprite
+
+    def ui_callback_back_to_menu(self):
+        self.game_state = GameState.MAIN_MENU
+
+    def ui_callback_mutation_chance_changed(self, value: int):
+        self.mutation_chance = value / 10
+
+    def ui_callback_mutation_strength_changed(self, value: int):
+        self.mutation_strength = value / 10
 
 
 if __name__ == "__main__":
