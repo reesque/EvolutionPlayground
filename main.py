@@ -130,28 +130,35 @@ class Simulation:
                     self.window.tick()
             else:
                 self.ui_parent1 = np.random.choice(self.prev_gen)
-                self.prev_gen.remove(self.ui_parent1)
                 self.ui_parent2 = np.random.choice(self.prev_gen)
-                self.prev_gen.remove(self.ui_parent2)
 
             if self.ui_parent1 is not None and self.ui_parent2 is not None:
-                if not self.is_auto:
-                    self.prev_gen.remove(self.ui_parent1)
-                    self.prev_gen.remove(self.ui_parent2)
-
                 child_choices, child_policy = self.child_policy_distribution(self.ui_parent1.eaten + self.ui_parent2.eaten)
                 self.offsprings = []
-                for _ in range(np.random.choice(child_choices, p=child_policy)):
+                num_child = np.random.choice(child_choices, p=child_policy)
+                for _ in range(num_child):
                     child = self.blend_crossover(self.ui_parent1, self.ui_parent2)
                     mutated, speed_mutation, size_mutation = self.mutate(child)
                     self.offsprings.append((child, mutated, speed_mutation, size_mutation))
                     self.agents.append(child)
 
+                if self.ui_parent1 in self.prev_gen:
+                    self.prev_gen.remove(self.ui_parent1)
+
+                if self.ui_parent2 in self.prev_gen:
+                    self.prev_gen.remove(self.ui_parent2)
+
+                self.ui_parent1, self.ui_parent2 = None, None
+
                 self.ui_offspring_confirmed = False
                 self.game_state = GameState.OFFSPRING_OVERVIEW
         else:
             # Spawn new food
-            food_replenish_count = (self.initial_food_amount * self.food_replenish_const /
+            replenish_const = self.food_replenish_const
+            if self.cm.current == Condition.RAIN:
+                replenish_const *= 3
+
+            food_replenish_count = (self.initial_food_amount * replenish_const /
                                     (max(1, len(self.agents) - self.food_replenish_const)))
             food_replenish_count *= random.uniform(0.9, 1.1)
 
@@ -160,9 +167,9 @@ class Simulation:
 
             if self.cm.current == Condition.DROUGHT:
                 random.shuffle(self.foods)
-                self.foods = self.foods[0:len(self.foods) // 2]
+                self.foods = self.foods[0:len(self.foods) // 3]
 
-            self.game_state = GameState.CONDITION_OVERVIEW
+            self.game_state = GameState.SIM_RUNNING
             self.is_auto = False
 
     def generation_eval(self):
@@ -175,15 +182,10 @@ class Simulation:
 
             i += 1
 
-        # Species died out
-        if len(self.agents) == 0:
-            self.game_state = GameState.GAME_OVER
-            return
-
         self.prev_gen = self.agents.copy()
         self.agents = []
         self.cm()
-        self.game_state = GameState.PARENTS_SELECTION
+        self.game_state = GameState.GAME_END_EVAL
 
     def run(self):
         # Main loop
@@ -210,13 +212,18 @@ class Simulation:
                 self.ui_main_menu.render(events)
                 self.window.tick()
 
-            if self.game_state == GameState.GENERATION_EVAL:
+            elif self.game_state == GameState.GENERATION_EVAL:
                 self.generation_eval()
 
-            if self.game_state == GameState.PARENTS_SELECTION:
+            elif self.game_state == GameState.CONDITION_OVERVIEW:
+                self.window.clear()
+                self.ui_condition_card.render(self.cm.current, events, self.ui_callback_condition_confirmed)
+                self.window.tick()
+
+            elif self.game_state == GameState.PARENTS_SELECTION:
                 self.next_generation(events)
 
-            if self.game_state == GameState.OFFSPRING_OVERVIEW:
+            elif self.game_state == GameState.OFFSPRING_OVERVIEW:
                 if not self.is_auto:
                     if not self.ui_offspring_confirmed:
                         self.window.clear()
@@ -227,17 +234,16 @@ class Simulation:
                 else:
                     self.game_state = GameState.PARENTS_SELECTION
 
-            if self.game_state == GameState.CONDITION_OVERVIEW:
-                self.window.clear()
-                self.ui_condition_card.render(self.cm.current, events, self.ui_callback_condition_confirmed)
-                self.window.tick()
+            elif self.game_state == GameState.GAME_END_EVAL:
+                if len(self.agents) >= 2 or len(self.prev_gen) >= 2:
+                    self.game_state = GameState.CONDITION_OVERVIEW
+                    continue
 
-            if self.game_state == GameState.GAME_OVER:
                 self.window.clear()
                 self.ui_game_over.render(events, self.generation)
                 self.window.tick()
 
-            if self.game_state == GameState.SIM_RUNNING or self.game_state == GameState.SIM_PAUSED:
+            elif self.game_state == GameState.SIM_RUNNING or self.game_state == GameState.SIM_PAUSED:
                 self.window.clear()
                 done = self.run_simulation(self.game_state == GameState.SIM_PAUSED)
 
@@ -247,11 +253,12 @@ class Simulation:
                 if done:
                     self.game_state = GameState.GENERATION_EVAL
                     self.generation += 1
+                    continue
 
                 self.ui_sim_bar.render(events, self.generation, len(self.agents), len(self.foods))
                 self.window.tick()
 
-    def ui_callback_game_reset(self):
+    def reset(self):
         self.generation = 0
         self.prev_gen = []
         self.offsprings = []
@@ -259,6 +266,9 @@ class Simulation:
         self.cm.reset()
         self.agents = [Agent(self.window, self.sl, self.cm, self.sprite, self.idg()) for _ in range(self.initial_population)]
         self.foods = [Food(self.window, self.sl, self.cm) for _ in range(self.initial_food_amount)]
+
+    def ui_callback_game_reset(self):
+        self.reset()
         self.game_state = GameState.SIM_RUNNING
 
     def ui_callback_parents_chose(self, p1: Agent, p2: Agent, is_auto: bool):
@@ -268,7 +278,7 @@ class Simulation:
         self.ui_agent_card.reset()
 
     def ui_callback_condition_confirmed(self):
-        self.game_state = GameState.SIM_RUNNING
+        self.game_state = GameState.PARENTS_SELECTION
 
     def ui_callback_offspring_confirmed(self):
         self.ui_offspring_confirmed = True
@@ -283,6 +293,7 @@ class Simulation:
         self.sprite = sprite
 
     def ui_callback_back_to_menu(self):
+        self.reset()
         self.game_state = GameState.MAIN_MENU
 
     def ui_callback_mutation_chance_changed(self, value: int):

@@ -10,7 +10,7 @@ from PIL import Image, ImageSequence
 
 class GameState(Enum):
     MAIN_MENU = 0
-    GAME_OVER = 1
+    GAME_END_EVAL = 1
     SIM_RUNNING = 2
     SIM_PAUSED = 3
     GENERATION_EVAL = 4
@@ -39,18 +39,35 @@ class EntitySprite(Enum):
         return f"{self.name.capitalize()}.gif"
 
 
-class Condition(Enum):
-    NONE = ('None', None)
-    WIND = ('Wind', 'Strong wind in the region. Getting pushed slightly')
-    SNOW = ('Snow', 'The white snow has started to fall from the sky. Movement is more limited')
-    DROUGHT = ('Drought', 'Prolonged dry condition. Food is more scarce')
+class TileType(Enum):
+    GRASS = (72, 156, 76)
+    SNOW = (230, 228, 228)
+    DRY = (202, 179, 88)
+    WET = (50, 118, 53)
 
-    def __init__(self, label, desc):
+
+class Condition(Enum):
+    NONE = ('None', None, TileType.GRASS)
+    WIND = ('Wind', 'A strong gust of wind is travelling through the region. '
+                    'Movement is pushed slightly to one direction', TileType.GRASS)
+    SNOW = ('Snow', 'The white snow has started to fall from the sky. '
+                    'Movement in the region is more limited', TileType.SNOW)
+    DROUGHT = ('Drought', 'The region is exposed to a prolonged dry weather condition. '
+                          'Food abundancy is reduced', TileType.DRY)
+    RAIN = ('Rain', 'The heavy rain inside the region has stimulated the growth of plants. '
+                    'Food has massively replenished', TileType.GRASS)
+
+    def __init__(self, label, desc, tile_type):
         self.label = label
         self.desc = desc
+        self.tile_type = tile_type
 
     def get_path(self):
         return f"{self.name.capitalize()}.png"
+
+    @staticmethod
+    def get_probability():
+        return [0.65, 0.1, 0.1, 0.1, 0.05]
 
 
 class ConditionManager:
@@ -61,7 +78,7 @@ class ConditionManager:
         self.direction = (0, 0)
 
     def __call__(self, *args, **kwargs):
-        self.current = np.random.choice(list(Condition), p=[0.7, 0.1, 0.1, 0.1])
+        self.current = np.random.choice(list(Condition), p=Condition.get_probability())
 
         if self.current == Condition.WIND:
             self._pick_direction()
@@ -111,15 +128,10 @@ class SpriteLoader:
             self.entity_sprite[item.name] = frames
 
         # Tile
-        self.grass_sprite = []
+        self.tile_sprite = []
         for i in range(1, 5):
             tile = Image.open(f'assets/Tile/Tile{i}.png')
-            self.grass_sprite.append(pygame.image.frombytes(tile.convert("RGBA").tobytes(), tile.size, "RGBA"))
-
-        self.snow_sprite = []
-        for i in range(5, 9):
-            tile = Image.open(f'assets/Tile/Tile{i}.png')
-            self.snow_sprite.append(pygame.image.frombytes(tile.convert("RGBA").tobytes(), tile.size, "RGBA"))
+            self.tile_sprite.append(pygame.image.frombytes(tile.convert("RGBA").tobytes(), tile.size, "RGBA"))
 
         # Food
         self.food_sprite = []
@@ -149,12 +161,14 @@ class SpriteLoader:
             self.condition_sprite[item.name] = frames
 
     def get_condition_sprite_at_frame(self, sprite, frame):
+        frame = min(len(self.condition_sprite[sprite.name]) - 1, max(frame, 0))
         return self.condition_sprite[sprite.name][frame]
 
     def get_num_frame_in_condition_sprite(self, sprite):
         return len(self.condition_sprite[sprite.name])
 
     def get_entity_sprite_at_frame(self, sprite, frame):
+        frame = min(len(self.entity_sprite[sprite.name]) - 1, max(frame, 0))
         return self.entity_sprite[sprite.name][frame]
 
     def get_num_frame_in_entity_sprite(self, sprite):
@@ -164,10 +178,10 @@ class SpriteLoader:
         return np.random.choice([0, 1, 2, 3], p=[0.05, 0.5, 0.05, 0.40])
 
     def get_tile_size(self):
-        return self.grass_sprite[0].get_height()
+        return self.tile_sprite[0].get_height()
 
-    def get_tile_at(self, idx: int, is_snow: bool):
-        return self.snow_sprite[idx] if is_snow else self.grass_sprite[idx]
+    def get_tile_at(self, idx: int):
+        return self.tile_sprite[idx]
 
     def get_random_food_index(self):
         return np.random.randint(0, len(self.food_sprite))
@@ -182,7 +196,6 @@ class Window:
         self.height = 600
         self.fps = fps
         self.clock = pygame.time.Clock()
-        self.bg_color = (r, g, b)
         self.sl = sl
         self.cm = cm
 
@@ -199,12 +212,12 @@ class Window:
         self.clear()
 
     def clear(self):
-        self.screen.fill(self.bg_color)
+        self.screen.fill(self.cm.current.tile_type.value)
 
         for i in range(len(self.tile_ground)):
             for j in range(len(self.tile_ground[0])):
                 idx, x, y = self.tile_ground[i][j]
-                sprite = self.sl.get_tile_at(idx, self.cm.current == Condition.SNOW)
+                sprite = self.sl.get_tile_at(idx)
                 self.screen.blit(sprite, (x, y))
 
     def tick(self):

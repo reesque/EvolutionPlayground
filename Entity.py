@@ -163,8 +163,8 @@ class Agent(Entity):
                     speed_modifier = 0.5
 
                 if self.cm.current == Condition.WIND:
-                    self.position.x += self.cm.direction[0] * 1.5
-                    self.position.y += self.cm.direction[1] * 1.5
+                    self.position.x += self.cm.direction[0] * 0.5
+                    self.position.y += self.cm.direction[1] * 0.5
 
                 if distance_to_food <= self.size:
                     # Normalize direction and move towards it
