@@ -17,10 +17,31 @@ class GameState(Enum):
     OFFSPRING_OVERVIEW = 6
 
 
+class IDGenerator:
+    def __init__(self):
+        self.max_id = 0
+        self.next = []
+        self.reset()
+
+    def __call__(self, *args, **kwargs):
+        if len(self.next) == 0:
+            self.next = list(range(self.max_id, self.max_id * 10))
+            random.shuffle(self.next)
+            self.max_id *= 10
+
+        return self.next.pop()
+
+    def reset(self):
+        self.max_id = 100
+        self.next = list(range(0, self.max_id))
+        random.shuffle(self.next)
+
+
 class Simulation:
     def __init__(self):
         # Backend services
         self.sl = SpriteLoader()
+        self.idg = IDGenerator()
 
         # Initialize Pygame
         pygame.init()
@@ -44,7 +65,7 @@ class Simulation:
         self.offsprings = None
         self.card_choices = None
         self.sprite = EntitySprite.CHICKEN
-        self.agents = [Agent(self.window, self.sl, self.sprite) for _ in range(self.initial_population)]
+        self.agents = [Agent(self.window, self.sl, self.sprite, self.idg()) for _ in range(self.initial_population)]
         self.foods = [Food(self.window, self.sl) for _ in range(self.initial_food_amount)]
 
         # UI Elements
@@ -72,7 +93,7 @@ class Simulation:
             if not is_paused and agent.move(self.foods.copy()):
                 agents_moved = agents_moved + 1
 
-            agent.draw()
+            agent.render()
 
         # Food be eaten
         if not is_paused:
@@ -89,7 +110,7 @@ class Simulation:
 
         # Update Food
         for food in self.foods:
-            food.draw()
+            food.render()
 
         # Termination if all out of energy
         if agents_moved == 0 and not is_paused:
@@ -101,21 +122,22 @@ class Simulation:
         alpha = random.uniform(0.3, 0.7)
         child_speed = alpha * parent1.speed + (1 - alpha) * parent2.speed
         child_size = alpha * parent1.size + (1 - alpha) * parent2.size
-        return Agent(self.window, self.sl, self.sprite, speed=child_speed, size=child_size)
+        return Agent(self.window, self.sl, self.sprite, self.idg(), speed=child_speed, size=child_size,
+                     parent1=parent1, parent2=parent2)
 
     def mutate(self, agent: Agent):
         speed_mutation = 0
         size_mutation = 0
         mutated = random.random() < self.mutation_chance
         if mutated:
-            speed_mutation = random.uniform(-self.mutation_strength, self.mutation_strength)
-            size_mutation = random.uniform(-self.mutation_strength, self.mutation_strength)
+            speed_mutation = round(random.uniform(-self.mutation_strength, self.mutation_strength), 2)
+            size_mutation = round(random.uniform(-self.mutation_strength, self.mutation_strength), 2)
             agent.speed += speed_mutation
             agent.size += size_mutation
 
         return mutated, speed_mutation, size_mutation
 
-    def child_policy_distribution(self, fitness, scale_factor=3):
+    def child_policy_distribution(self, fitness):
         child_choices = np.linspace(1, self.max_offspring, self.max_offspring, dtype=int)
 
         distances = np.abs(child_choices - fitness / (self.max_offspring + 1))
@@ -159,7 +181,7 @@ class Simulation:
                 self.game_state = GameState.OFFSPRING_OVERVIEW
         else:
             # Spawn new food
-            food_replenish_count = (self.initial_food_amount  * self.food_replenish_const /
+            food_replenish_count = (self.initial_food_amount * self.food_replenish_const /
                                     (max(1, len(self.agents) - self.food_replenish_const)))
             food_replenish_count *= random.uniform(0.9, 1.1)
 
@@ -253,7 +275,8 @@ class Simulation:
         self.generation = 0
         self.prev_gen = []
         self.offsprings = []
-        self.agents = [Agent(self.window, self.sl, self.sprite) for _ in range(self.initial_population)]
+        self.idg.reset()
+        self.agents = [Agent(self.window, self.sl, self.sprite, self.idg()) for _ in range(self.initial_population)]
         self.foods = [Food(self.window, self.sl) for _ in range(self.initial_food_amount)]
         self.game_state = GameState.SIM_RUNNING
 

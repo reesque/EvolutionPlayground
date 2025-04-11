@@ -36,9 +36,6 @@ class SpriteLoader:
             frames = [pygame.image.frombytes(frame.convert("RGBA").tobytes(), frame.size, "RGBA")
                       for frame in ImageSequence.Iterator(gif)]
 
-            frames = [pygame.transform.scale(frame, (frame.get_width() * 1.5, frame.get_height() * 1.5))
-                      for frame in frames]
-
             self.entity_sprite[item.name] = frames
 
         # Tile

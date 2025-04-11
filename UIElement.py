@@ -86,8 +86,9 @@ class AgentCard(UIElement):
         super().__init__(window)
         self.idx = idx
         self.sl = sl
-        self.font1 = pygame.font.Font('assets/PressStart2P-Regular.ttf', 16)
-        self.font2 = pygame.font.Font('assets/PressStart2P-Regular.ttf', 10)
+        self.font1 = pygame.font.Font('assets/PressStart2P-Regular.ttf', 13)
+        self.font2 = pygame.font.Font('assets/PressStart2P-Regular.ttf', 11)
+        self.font3 = pygame.font.Font('assets/PressStart2P-Regular.ttf', 16)
         self.box = pygame.Rect(28 + idx * 240, 120, 220, 350)
 
         self.current_frame = -1
@@ -96,53 +97,72 @@ class AgentCard(UIElement):
         if self.current_frame == -1:
             self.current_frame = random.randint(0, self.sl.get_num_frame_in_entity_sprite(agent.sprite) - 1)
 
-        title = self.font1.render(f'{agent.sprite.value} {self.idx + 1}', True, (255, 255, 255))
+        # Measures
+        current_sprite = self.sl.get_entity_sprite_at_frame(agent.sprite, self.current_frame)
+        sprite_width, sprite_height = current_sprite.get_size()
+        sprite_pos = (self.box.x + 75, self.box.y + 40)
+        title_size = self.font1.size(agent.sprite.value)
+        id_size = self.font1.size(f'#{agent.id}')
+
+        # Texts
+        title = self.font1.render(f'{agent.sprite.value}', True, (255, 255, 255))
+        agent_id = self.font1.render(f'#{agent.id}', True, (255, 255, 255))
+
         speed = self.font2.render(f'Speed: {agent.speed:.2G}', True, (255, 255, 255))
-        awareness = self.font2.render(f'Sight: {agent.size:.2G}', True, (255, 255, 255))
-        fitness = self.font2.render(f'Food Gathered: {agent.eaten}', True, (255, 255, 255))
+        awareness = self.font2.render(f'Size: {agent.size:.2G}', True, (255, 255, 255))
+        fitness = self.font2.render(f'Gathered: {agent.eaten}', True, (255, 255, 255))
 
         # Render
-        current_sprite = self.sl.get_entity_sprite_at_frame(agent.sprite, self.current_frame)
         pygame.draw.rect(self.window.screen, (0, 0, 0), self.box.inflate(0, 0), border_radius=5)
         self.window.screen.blit(pygame.transform.scale(
-            current_sprite, (current_sprite.get_width() * 3,
-                             current_sprite.get_height() * 3)), (self.box.x + 75, self.box.y + 40))
+            current_sprite, (current_sprite.get_width() * 4.5,
+                             current_sprite.get_height() * 4.5)), sprite_pos)
 
-        self.window.screen.blit(title, (self.box.x + 25, self.box.y + 180))
-        self.window.screen.blit(speed, (self.box.x + 25, self.box.y + 210))
-        self.window.screen.blit(awareness, (self.box.x + 25, self.box.y + 235))
-        self.window.screen.blit(fitness, (self.box.x + 25, self.box.y + 260))
+        self.window.screen.blit(title, (sprite_pos[0] + (sprite_width * 4.5 // 2) - (title_size[0] // 2), sprite_pos[1] + 90))
+        self.window.screen.blit(agent_id, (sprite_pos[0] + (sprite_width * 4.5 // 2) - (id_size[0] // 2), sprite_pos[1] + 110))
+        self.window.screen.blit(speed, (self.box.x + 22, self.box.y + 210))
+        self.window.screen.blit(awareness, (self.box.x + 22, self.box.y + 235))
+        self.window.screen.blit(fitness, (self.box.x + 22, self.box.y + 260))
         if is_active:
             pygame.draw.rect(self.window.screen, (180, 0, 0), self.box, 5, border_radius=5)
 
         if pygame.time.get_ticks() % 10 == 0:
             self.current_frame = pygame.time.get_ticks() % self.sl.get_num_frame_in_entity_sprite(agent.sprite)
 
-    def render_mutate(self, agent: Agent, is_mutate: bool, speed_mutation: float = 0.0, size_mutation: float = 0.0):
+    def render_child(self, agent: Agent, is_mutate: bool, speed_mutation: float = 0.0, size_mutation: float = 0.0):
         if self.current_frame == -1:
             self.current_frame = random.randint(0, self.sl.get_num_frame_in_entity_sprite(agent.sprite) - 1)
 
-        title = self.font1.render(f'{agent.sprite.value} {self.idx + 1}', True, (255, 255, 255))
+        # Measures
+        current_sprite = self.sl.get_entity_sprite_at_frame(agent.sprite, self.current_frame)
+        sprite_width, sprite_height = current_sprite.get_size()
+        sprite_pos = (self.box.x + 75, self.box.y + 40)
+        title_size = self.font1.size(agent.sprite.value)
+        id_size = self.font1.size(f'#{agent.id}')
+
+        title = self.font1.render(f'{agent.sprite.value}', True, (255, 255, 255))
+        agent_id = self.font1.render(f'#{agent.id}', True, (255, 255, 255))
         if is_mutate:
-            speed = self.font2.render(f'Speed: {(agent.speed - speed_mutation):.2G} ({speed_mutation:+.2G})',
+            speed = self.font2.render(f'Speed: {(agent.speed - speed_mutation):.2G} ({speed_mutation:+.1G})',
                                       True, (255, 255, 255))
-            awareness = self.font2.render(f'Sight: {(agent.size - size_mutation):.2G} ({size_mutation:+.2G})',
+            awareness = self.font2.render(f'Size: {(agent.size - size_mutation):.2G} ({size_mutation:+.1G})',
                                           True, (255, 255, 255))
         else:
             speed = self.font2.render(f'Speed: {agent.speed:.2G}', True, (255, 255, 255))
-            awareness = self.font2.render(f'Sight: {agent.size:.2G}', True, (255, 255, 255))
-        mutated = pygame.transform.rotate(self.font1.render('Mutated', True, (255, 255, 0)), 348)
+            awareness = self.font2.render(f'Size: {agent.size:.2G}', True, (255, 255, 255))
+        mutated = pygame.transform.rotate(self.font3.render('Mutated', True, (255, 255, 0)), 348)
 
         # Render
         current_sprite = self.sl.get_entity_sprite_at_frame(agent.sprite, self.current_frame)
         pygame.draw.rect(self.window.screen, (0, 0, 0), self.box.inflate(0, 0), border_radius=5)
         self.window.screen.blit(pygame.transform.scale(
-            current_sprite, (current_sprite.get_width() * 3,
-                             current_sprite.get_height() * 3)), (self.box.x + 75, self.box.y + 40))
+            current_sprite, (current_sprite.get_width() * 4.5,
+                             current_sprite.get_height() * 4.5)), (self.box.x + 75, self.box.y + 40))
 
-        self.window.screen.blit(title, (self.box.x + 25, self.box.y + 180))
-        self.window.screen.blit(speed, (self.box.x + 25, self.box.y + 210))
-        self.window.screen.blit(awareness, (self.box.x + 25, self.box.y + 235))
+        self.window.screen.blit(title, (sprite_pos[0] + (sprite_width * 4.5 // 2) - (title_size[0] // 2), sprite_pos[1] + 90))
+        self.window.screen.blit(agent_id, (sprite_pos[0] + (sprite_width * 4.5 // 2) - (id_size[0] // 2), sprite_pos[1] + 110))
+        self.window.screen.blit(speed, (self.box.x + 22, self.box.y + 210))
+        self.window.screen.blit(awareness, (self.box.x + 22, self.box.y + 235))
         if is_mutate:
             pygame.draw.rect(self.window.screen, (255, 255, 0), self.box, 5, border_radius=5)
             self.window.screen.blit(mutated, (self.box.x + 55, self.box.y + 282))
@@ -225,7 +245,7 @@ class Offspring(UIElement):
 
         for i in range(len(offsprings)):
             agent, is_mutate, speed_mutate, size_mutate = offsprings[i]
-            self.card[i].render_mutate(agent, is_mutate, speed_mutate, size_mutate)
+            self.card[i].render_child(agent, is_mutate, speed_mutate, size_mutate)
 
         self.confirm_btn.render()
 
@@ -249,7 +269,8 @@ class SeekBar(UIElement):
 
     def render(self, events):
         for event in events:
-            if event.type == pygame.MOUSEBUTTONUP and self.y <= event.pos[1] <= self.y + self.h:
+            if (event.type == pygame.MOUSEBUTTONUP and
+                    self.x <= event.pos[0] <= self.x + self.w) and self.y <= event.pos[1] <= self.y + self.h:
                 self.slider_x = max(self.x_min, min(event.pos[0], self.x_max))
                 self.value = ((self.slider_x - self.x_min) * (self.max - self.min) / (
                         self.x_max - self.x_min)) + self.min
@@ -283,7 +304,7 @@ class MainMenu(UIElement):
         self.title = self.font1.render('Genetics Playground', True, (0, 0, 0))
         self.start_btn = Button(window, 40, 310, 125, 44, 'Start', 20, (13, 13))
 
-        self.menu_agent = MenuAgent(window, sl, EntitySprite.CHICKEN, 2.0, sprite_callback,
+        self.menu_agent = MenuAgent(window, sl, EntitySprite.CHICKEN, 3.0, sprite_callback,
                                     bound=((25, self.window.height - 220),
                                            (self.window.width - 25, self.window.height - 25)))
 
@@ -301,7 +322,7 @@ class MainMenu(UIElement):
                                               True, (0, 0, 0))
 
         self.menu_agent.move()
-        self.menu_agent.draw(events)
+        self.menu_agent.render(events)
 
         self.window.screen.blit(self.title, (40, 100))
         self.window.screen.blit(population, (40, 180))

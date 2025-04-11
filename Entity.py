@@ -4,6 +4,7 @@ from Utils import Position
 from App import Window
 import random
 from SpriteProcessor import *
+from typing import Optional
 
 
 class Entity:
@@ -25,11 +26,11 @@ class MenuAgent(Entity):
 
         self.sprite_scale = sprite_scale
         self.position = Position(self.bound_max[0] // 2, self.bound_max[1] // 2)
-
         self.speed = 2
         self.callback = callback
 
-        # Sprite vars
+        # Sprite vars & font
+        self.font1 = pygame.font.Font('assets/PressStart2P-Regular.ttf', 12)
         self.sprite = sprite
         self.current_frame = random.randint(0, self.sl.get_num_frame_in_entity_sprite(self.sprite) - 1)
 
@@ -50,7 +51,7 @@ class MenuAgent(Entity):
         self.position.x = max(self.bound_min[0], min(self.bound_max[0], self.position.x))
         self.position.y = max(self.bound_min[1], min(self.bound_max[1], self.position.y))
 
-    def draw(self, events):
+    def render(self, events):
         # Sprite orientation
         current_sprite = self.sl.get_entity_sprite_at_frame(self.sprite, self.current_frame)
         current_sprite = pygame.transform.scale(current_sprite,
@@ -73,9 +74,15 @@ class MenuAgent(Entity):
                     self.sprite = sp[index]
                     self.callback(self.sprite)
 
+        # Text
+        name_size = self.font1.size(self.sprite.value)
+        name = self.font1.render(f'{self.sprite.value}', True, (0, 0, 0))
+
         # Render
-        self.window.screen.blit(current_sprite,
-                                (self.position.x - (sprite_width / 2), self.position.y - (sprite_height / 2)))
+        sprite_pos = (self.position.x - (sprite_width / 2), self.position.y - (sprite_height / 2))
+        text_pos = (sprite_pos[0] + (sprite_width // 2) - (name_size[0] // 2), sprite_pos[1] + 60)
+        self.window.screen.blit(current_sprite, sprite_pos)
+        self.window.screen.blit(name, text_pos)
 
         # Clock tick
         if pygame.time.get_ticks() % 10 == 0:
@@ -87,16 +94,20 @@ class MenuAgent(Entity):
 
 
 class Agent(Entity):
-    def __init__(self, window: Window, sl: SpriteLoader, sprite: EntitySprite, speed: int = -1, size: int = -1,
-                 bound: tuple[tuple[int, int], tuple[int, int]] = None):
+    def __init__(self, window: Window, sl: SpriteLoader, sprite: EntitySprite, agent_id: int,
+                 speed: int = -1, size: int = -1, bound: tuple[tuple[int, int], tuple[int, int]] = None,
+                 parent1: Optional["Agent"] = None, parent2: Optional["Agent"] = None):
         super().__init__(window, sl)
 
+        # Bound
         self.bound_min = (0, 0)
         self.bound_max = (self.window.width, self.window.height)
         if bound is not None:
             self.bound_min = bound[0]
             self.bound_max = bound[1]
 
+        # Properties
+        self.id = agent_id
         self.position = Position(self.bound_max[0] // 2, self.bound_max[1] // 2)
 
         self.size = round(size, 2)
@@ -105,15 +116,21 @@ class Agent(Entity):
 
         self.speed = round(speed, 2)
         if speed < 1:
-            self.speed = round(1 / math.log(self.size, 10) * 3, 2)
+            self.speed = round(1 / math.log(self.size, 10) * 4, 2)
 
         self.energy = 100
         self.color = (0, 0, 255)
         self.eaten = 0
 
+        # Parents (Optional)
+        self.parent1 = parent1
+        self.parent2 = parent2
+
         # Sprite vars
         self.sprite = sprite
         self.current_frame = random.randint(0, self.sl.get_num_frame_in_entity_sprite(self.sprite) - 1)
+
+        self.sprite_scale = self.size / 20
 
         self._pick_direction()
 
@@ -164,9 +181,12 @@ class Agent(Entity):
 
         return False
 
-    def draw(self):
+    def render(self):
         # Sprite orientation
         current_sprite = self.sl.get_entity_sprite_at_frame(self.sprite, self.current_frame)
+        current_sprite = pygame.transform.scale(current_sprite,
+                                                (current_sprite.get_width() * self.sprite_scale,
+                                                 current_sprite.get_height() * self.sprite_scale))
         if self.direction[0] < 0:
             current_sprite = pygame.transform.flip(current_sprite, True, False)
 
@@ -176,7 +196,11 @@ class Agent(Entity):
         # Render
         self.window.screen.blit(current_sprite,
                                 (self.position.x - (sprite_width / 2), self.position.y - (sprite_height / 2)))
-        pygame.draw.circle(self.window.screen, (180, 0, 0), (self.position.x, self.position.y), self.size, width=2)
+
+        circle_surface = pygame.Surface((self.size * 2, self.size * 2), pygame.SRCALPHA)
+        pygame.draw.circle(circle_surface, (180, 0, 0) + (int((self.energy / 100) * 255),),
+                           (self.size, self.size), self.size, width=2)
+        self.window.screen.blit(circle_surface, (self.position.x - self.size, self.position.y - self.size))
 
         # Clock tick
         if pygame.time.get_ticks() % 10 == 0:
@@ -194,7 +218,7 @@ class Food(Entity):
         self.position = Position(random.randint(8, self.window.width - 8), random.randint(8, self.window.height - 58))
         self.sprite_idx = sl.get_random_food_index()
 
-    def draw(self):
+    def render(self):
         sprite = self.sl.get_food_sprite(self.sprite_idx)
         sprite_width, sprite_height = sprite.get_size()
         self.window.screen.blit(sprite, (self.position.x - (sprite_width // 2), self.position.y - (sprite_height // 2)))
