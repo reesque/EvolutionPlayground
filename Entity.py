@@ -1,22 +1,25 @@
 import math
 
+import pygame
+
+from App import Window, ConditionManager, SpriteLoader, EntitySprite, Condition
 from Utils import Position
-from App import Window
 import random
-from SpriteProcessor import *
 from typing import Optional
 
 
 class Entity:
-    def __init__(self, window: Window, sl: SpriteLoader):
+    def __init__(self, window: Window, sl: SpriteLoader, cm: ConditionManager):
         self.window = window
         self.sl = sl
+        self.cm = cm
 
 
 class MenuAgent(Entity):
-    def __init__(self, window: Window, sl: SpriteLoader, sprite: EntitySprite, sprite_scale: float, callback,
+    def __init__(self, window: Window, sl: SpriteLoader, cm: ConditionManager, sprite: EntitySprite,
+                 sprite_scale: float, callback,
                  bound: tuple[tuple[int, int], tuple[int, int]] = None):
-        super().__init__(window, sl)
+        super().__init__(window, sl, cm)
 
         self.bound_min = (0, 0)
         self.bound_max = (self.window.width, self.window.height)
@@ -94,10 +97,10 @@ class MenuAgent(Entity):
 
 
 class Agent(Entity):
-    def __init__(self, window: Window, sl: SpriteLoader, sprite: EntitySprite, agent_id: int,
+    def __init__(self, window: Window, sl: SpriteLoader, cm: ConditionManager, sprite: EntitySprite, agent_id: int,
                  speed: int = -1, size: int = -1, bound: tuple[tuple[int, int], tuple[int, int]] = None,
                  parent1: Optional["Agent"] = None, parent2: Optional["Agent"] = None):
-        super().__init__(window, sl)
+        super().__init__(window, sl, cm)
 
         # Bound
         self.bound_min = (0, 0)
@@ -154,10 +157,19 @@ class Agent(Entity):
                 direction_y = closest_food.position.y - self.position.y
                 distance_to_food = (direction_x ** 2 + direction_y ** 2) ** 0.5
 
+                speed_modifier = 1
+
+                if self.cm.current == Condition.SNOW:
+                    speed_modifier = 0.5
+
+                if self.cm.current == Condition.WIND:
+                    self.position.x += self.cm.direction[0] * 1.5
+                    self.position.y += self.cm.direction[1] * 1.5
+
                 if distance_to_food <= self.size:
                     # Normalize direction and move towards it
-                    self.position.x += self.speed * (direction_x / distance_to_food)
-                    self.position.y += self.speed * (direction_y / distance_to_food)
+                    self.position.x += self.speed * speed_modifier * (direction_x / distance_to_food)
+                    self.position.y += self.speed * speed_modifier * (direction_y / distance_to_food)
                 else:
                     if (self.position.x <= self.bound_min[0]
                             or self.position.x >= self.bound_max[0]
@@ -165,8 +177,8 @@ class Agent(Entity):
                             or self.position.y >= self.bound_max[1] - 50):
                         self._pick_direction()
 
-                    self.position.x += self.speed * self.direction[0]
-                    self.position.y += self.speed * self.direction[1]
+                    self.position.x += self.speed * speed_modifier * self.direction[0]
+                    self.position.y += self.speed * speed_modifier * self.direction[1]
 
             # Clamp to screen edge
             self.position.x = max(self.bound_min[0], min(self.bound_max[0], self.position.x))
@@ -212,8 +224,8 @@ class Agent(Entity):
 
 
 class Food(Entity):
-    def __init__(self, window: Window, sl: SpriteLoader):
-        super().__init__(window, sl)
+    def __init__(self, window: Window, sl: SpriteLoader, cm: ConditionManager):
+        super().__init__(window, sl, cm)
         self.size = 6
         self.position = Position(random.randint(8, self.window.width - 8), random.randint(8, self.window.height - 58))
         self.sprite_idx = sl.get_random_food_index()

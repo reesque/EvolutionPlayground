@@ -3,18 +3,17 @@ import random
 import numpy as np
 import pygame
 
-import App
+from App import Window, SpriteLoader, ConditionManager, Condition, EntitySprite
 from Entity import MenuAgent, Agent
-from SpriteProcessor import SpriteLoader, EntitySprite
 
 
 class UIElement:
-    def __init__(self, window: App):
+    def __init__(self, window: Window):
         self.window = window
 
 
 class PauseBox(UIElement):
-    def __init__(self, window: App):
+    def __init__(self, window: Window):
         super().__init__(window)
         self.window = window
         self.font = pygame.font.Font('assets/PressStart2P-Regular.ttf', 15)
@@ -28,7 +27,7 @@ class PauseBox(UIElement):
 
 
 class SimulationInformation(UIElement):
-    def __init__(self, window: App, menu_callback):
+    def __init__(self, window: Window, menu_callback):
         super().__init__(window)
         self.font = pygame.font.Font('assets/PressStart2P-Regular.ttf', 14)
         self.box = pygame.Rect(15, self.window.height - 50, self.window.width - 30, 40)
@@ -56,7 +55,7 @@ class SimulationInformation(UIElement):
 
 
 class Button(UIElement):
-    def __init__(self, window: App, x: int, y: int, w: int, h: int, title: str,
+    def __init__(self, window: Window, x: int, y: int, w: int, h: int, title: str,
                  font_size: int, text_offset: tuple[int, int],
                  button_color: tuple[int, int, int] = (255, 255, 255),
                  text_color: tuple[int, int, int] = (0, 0, 0)):
@@ -64,15 +63,17 @@ class Button(UIElement):
         self.box = pygame.Rect(x, y, w, h)
         self.x, self.y = x, y
         self.color = button_color
+        self.text_color = text_color
         self.text_offset = text_offset
         self.active = True
+        self.title = title
         self.font = pygame.font.Font('assets/PressStart2P-Regular.ttf', font_size)
-        self.text = self.font.render(title, True, text_color)
 
     def render(self):
+        text = self.font.render(self.title, True, self.text_color if self.active else (0, 0, 0))
         pygame.draw.rect(self.window.screen, self.color if self.active else (100, 100, 100),
                          self.box.inflate(0, 0), border_radius=3)
-        self.window.screen.blit(self.text, (self.x + self.text_offset[0], self.y + self.text_offset[1]))
+        self.window.screen.blit(text, (self.x + self.text_offset[0], self.y + self.text_offset[1]))
 
     def set_active(self, is_active: bool):
         self.active = is_active
@@ -82,7 +83,7 @@ class Button(UIElement):
 
 
 class AgentCard(UIElement):
-    def __init__(self, window: App, sl: SpriteLoader, idx: int):
+    def __init__(self, window: Window, sl: SpriteLoader, idx: int):
         super().__init__(window)
         self.idx = idx
         self.sl = sl
@@ -118,8 +119,10 @@ class AgentCard(UIElement):
             current_sprite, (current_sprite.get_width() * 4.5,
                              current_sprite.get_height() * 4.5)), sprite_pos)
 
-        self.window.screen.blit(title, (sprite_pos[0] + (sprite_width * 4.5 // 2) - (title_size[0] // 2), sprite_pos[1] + 90))
-        self.window.screen.blit(agent_id, (sprite_pos[0] + (sprite_width * 4.5 // 2) - (id_size[0] // 2), sprite_pos[1] + 110))
+        self.window.screen.blit(title,
+                                (sprite_pos[0] + (sprite_width * 4.5 // 2) - (title_size[0] // 2), sprite_pos[1] + 90))
+        self.window.screen.blit(agent_id,
+                                (sprite_pos[0] + (sprite_width * 4.5 // 2) - (id_size[0] // 2), sprite_pos[1] + 110))
         self.window.screen.blit(speed, (self.box.x + 22, self.box.y + 210))
         self.window.screen.blit(awareness, (self.box.x + 22, self.box.y + 235))
         self.window.screen.blit(fitness, (self.box.x + 22, self.box.y + 260))
@@ -159,8 +162,10 @@ class AgentCard(UIElement):
             current_sprite, (current_sprite.get_width() * 4.5,
                              current_sprite.get_height() * 4.5)), (self.box.x + 75, self.box.y + 40))
 
-        self.window.screen.blit(title, (sprite_pos[0] + (sprite_width * 4.5 // 2) - (title_size[0] // 2), sprite_pos[1] + 90))
-        self.window.screen.blit(agent_id, (sprite_pos[0] + (sprite_width * 4.5 // 2) - (id_size[0] // 2), sprite_pos[1] + 110))
+        self.window.screen.blit(title,
+                                (sprite_pos[0] + (sprite_width * 4.5 // 2) - (title_size[0] // 2), sprite_pos[1] + 90))
+        self.window.screen.blit(agent_id,
+                                (sprite_pos[0] + (sprite_width * 4.5 // 2) - (id_size[0] // 2), sprite_pos[1] + 110))
         self.window.screen.blit(speed, (self.box.x + 22, self.box.y + 210))
         self.window.screen.blit(awareness, (self.box.x + 22, self.box.y + 235))
         if is_mutate:
@@ -177,14 +182,16 @@ class AgentCard(UIElement):
 
 
 class ParentsSelection(UIElement):
-    def __init__(self, window: App, sl: SpriteLoader):
+    def __init__(self, window: Window, sl: SpriteLoader):
         super().__init__(window)
 
         self.font = pygame.font.Font('assets/PressStart2P-Regular.ttf', 25)
         self.title = self.font.render('Choose 2 Parents', True, (0, 0, 0))
 
-        self.random_btn = Button(window, 375, 510, 115, 40, 'Random', 15, (13, 13))
-        self.confirm_btn = Button(window, 505, 510, 115, 40, 'Confirm', 15, (13, 13))
+        self.random_btn = Button(window, 375, 510, 115, 40, 'Random', 15, (13, 13),
+                                 button_color=(0, 0, 0), text_color=(255, 255, 255))
+        self.confirm_btn = Button(window, 505, 510, 115, 40, 'Confirm', 15, (13, 13),
+                                  button_color=(0, 0, 0), text_color=(255, 255, 255))
         self.card = [AgentCard(window, sl, c) for c in range(4)]
         self.active = [False for _ in range(4)]
 
@@ -225,13 +232,14 @@ class ParentsSelection(UIElement):
 
 
 class Offspring(UIElement):
-    def __init__(self, window: App, sl: SpriteLoader):
+    def __init__(self, window: Window, sl: SpriteLoader):
         super().__init__(window)
 
         self.font = pygame.font.Font('assets/PressStart2P-Regular.ttf', 25)
         self.title = self.font.render('Result Offsprings', True, (0, 0, 0))
 
-        self.confirm_btn = Button(window, 455, 510, 85, 40, 'Okay', 15, (13, 13))
+        self.confirm_btn = Button(window, 455, 510, 85, 40, 'Okay', 15, (13, 13),
+                                  button_color=(0, 0, 0), text_color=(255, 255, 255))
         self.card = [AgentCard(window, sl, c) for c in range(4)]
 
     def render(self, offsprings: list[(Agent, bool, int, int)], events, callback):
@@ -251,7 +259,7 @@ class Offspring(UIElement):
 
 
 class SeekBar(UIElement):
-    def __init__(self, window: App, x, y, w, h, min_lim, max_lim, init_value, callback):
+    def __init__(self, window: Window, x, y, w, h, min_lim, max_lim, init_value, callback):
         super().__init__(window)
 
         self.x, self.y, self.w, self.h = x, y, w, h
@@ -270,7 +278,7 @@ class SeekBar(UIElement):
     def render(self, events):
         for event in events:
             if (event.type == pygame.MOUSEBUTTONUP and
-                    self.x <= event.pos[0] <= self.x + self.w) and self.y <= event.pos[1] <= self.y + self.h:
+                self.x <= event.pos[0] <= self.x + self.w) and self.y <= event.pos[1] <= self.y + self.h:
                 self.slider_x = max(self.x_min, min(event.pos[0], self.x_max))
                 self.value = ((self.slider_x - self.x_min) * (self.max - self.min) / (
                         self.x_max - self.x_min)) + self.min
@@ -283,7 +291,7 @@ class SeekBar(UIElement):
 
 
 class MainMenu(UIElement):
-    def __init__(self, window: App, sl: SpriteLoader, population_callback, food_count_callback,
+    def __init__(self, window: Window, sl: SpriteLoader, cm: ConditionManager, population_callback, food_count_callback,
                  sprite_callback, game_start_callback, mutation_chance_callback, mutation_strength_callback):
         super().__init__(window)
         self.sl = sl
@@ -304,7 +312,7 @@ class MainMenu(UIElement):
         self.title = self.font1.render('Genetics Playground', True, (0, 0, 0))
         self.start_btn = Button(window, 40, 310, 125, 44, 'Start', 20, (13, 13))
 
-        self.menu_agent = MenuAgent(window, sl, EntitySprite.CHICKEN, 3.0, sprite_callback,
+        self.menu_agent = MenuAgent(window, sl, cm, EntitySprite.CHICKEN, 3.0, sprite_callback,
                                     bound=((25, self.window.height - 220),
                                            (self.window.width - 25, self.window.height - 25)))
 
@@ -339,7 +347,7 @@ class MainMenu(UIElement):
 
 
 class GameOver(UIElement):
-    def __init__(self, window: App, menu_callback):
+    def __init__(self, window: Window, menu_callback):
         super().__init__(window)
         self.menu_callback = menu_callback
 
@@ -362,3 +370,96 @@ class GameOver(UIElement):
         self.window.screen.blit(gen, (170, 310))
 
         self.menu_btn.render()
+
+
+class ConditionCard(UIElement):
+    def __init__(self, window: Window, sl: SpriteLoader):
+        super().__init__(window)
+        self.sl = sl
+        self.font1 = pygame.font.Font('assets/PressStart2P-Regular.ttf', 19)
+        self.font2 = pygame.font.Font('assets/PressStart2P-Regular.ttf', 11)
+
+        self.pos = (384, 120)
+        self.box = pygame.Rect(self.pos[0], self.pos[1], 220, 350)
+
+        self.current_frame = 0
+
+    def render(self, condition: Condition):
+        pygame.draw.rect(self.window.screen, (0, 0, 0), self.box.inflate(0, 0), border_radius=5)
+
+        if not condition == Condition.NONE:
+            current_sprite = self.sl.get_condition_sprite_at_frame(condition, self.current_frame)
+
+            # Measures
+            sprite_width, sprite_height = current_sprite.get_size()
+            sprite_pos = (self.box.x + 75, self.box.y + 40)
+            title_size = self.font1.size(condition.label)
+
+            # Texts
+            title = self.font1.render(condition.label, True, (255, 255, 255))
+
+            # Render
+            self.window.screen.blit(pygame.transform.scale(
+                current_sprite, (current_sprite.get_width() * 4.5,
+                                 current_sprite.get_height() * 4.5)), sprite_pos)
+
+            self.window.screen.blit(title, (
+            sprite_pos[0] + (sprite_width * 4.5 // 2) - (title_size[0] // 2), sprite_pos[1] + 120))
+
+            desc = self.render_wrapped_text(condition.desc, self.font2, 200)
+            for line in range(len(desc)):
+                desc_size = self.font2.size(desc[line])
+                line_text = self.font2.render(desc[line], True, (255, 255, 255))
+                self.window.screen.blit(line_text, (sprite_pos[0] + (sprite_width * 4.5 // 2) - (desc_size[0] // 2),
+                                                    sprite_pos[1] + 155 + line * 20))
+
+            if pygame.time.get_ticks() % 5 == 0:
+                self.current_frame = pygame.time.get_ticks() % self.sl.get_num_frame_in_condition_sprite(condition)
+
+            return
+
+        title = self.font1.render("None", True, (255, 255, 255))
+        self.window.screen.blit(title, (self.pos[0] + 75, self.pos[1] + 160))
+
+    def render_wrapped_text(self, text, font, max_width):
+        words = text.split(' ')
+        lines = []
+        current_line = ''
+
+        for word in words:
+            test_line = current_line + word + ' '
+            if font.size(test_line)[0] <= max_width:
+                current_line = test_line
+            else:
+                lines.append(current_line)
+                current_line = word + ' '
+
+        if current_line:
+            lines.append(current_line)
+
+        return lines
+
+
+class ConditionOverview(UIElement):
+    def __init__(self, window: Window, sl: SpriteLoader):
+        super().__init__(window)
+
+        self.font = pygame.font.Font('assets/PressStart2P-Regular.ttf', 25)
+        self.title = self.font.render('Environmental Condition', True, (0, 0, 0))
+
+        self.confirm_btn = Button(window, 455, 510, 85, 40, 'Okay', 15, (13, 13),
+                                  button_color=(0, 0, 0), text_color=(255, 255, 255))
+        self.card = ConditionCard(window, sl)
+
+    def render(self, condition: Condition, events, callback):
+        for event in events:
+            if event.type == pygame.MOUSEBUTTONUP:
+                # Prevent clicking on button underneath
+                if self.confirm_btn.collidepoint(event.pos) and not getattr(event, 'handled', False):
+                    callback()
+
+        self.window.screen.blit(self.title, (220, 50))
+
+        self.card.render(condition)
+
+        self.confirm_btn.render()
