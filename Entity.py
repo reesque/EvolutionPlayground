@@ -98,7 +98,8 @@ class MenuAgent(Entity):
 
 class Agent(Entity):
     def __init__(self, window: Window, sl: SpriteLoader, cm: ConditionManager, sprite: EntitySprite, agent_id: int,
-                 speed: int = -1, size: int = -1, bound: tuple[tuple[int, int], tuple[int, int]] = None,
+                 generation: int, speed: int = -1, size: int = -1,
+                 bound: tuple[tuple[int, int], tuple[int, int]] = None,
                  parent1: Optional["Agent"] = None, parent2: Optional["Agent"] = None):
         super().__init__(window, sl, cm)
 
@@ -111,6 +112,7 @@ class Agent(Entity):
 
         # Properties
         self.id = agent_id
+        self.generation = generation
         self.position = Position(self.bound_max[0] // 2, self.bound_max[1] // 2)
 
         self.size = round(size, 2)
@@ -125,9 +127,12 @@ class Agent(Entity):
         self.color = (0, 0, 255)
         self.eaten = 0
 
-        # Parents (Optional)
+        # Optionals
         self.parent1 = parent1
         self.parent2 = parent2
+        self.mutated = False
+        self.mutation_speed_offset = 0.0
+        self.mutation_size_offset = 0.0
 
         # Sprite vars
         self.sprite = sprite
@@ -163,8 +168,8 @@ class Agent(Entity):
                     speed_modifier = 0.5
 
                 if self.cm.current == Condition.WIND:
-                    self.position.x += self.cm.direction[0] * 0.5
-                    self.position.y += self.cm.direction[1] * 0.5
+                    self.position.x += self.cm.direction[0] * 1.2
+                    self.position.y += self.cm.direction[1] * 1.2
 
                 if distance_to_food <= self.size:
                     # Normalize direction and move towards it
@@ -193,7 +198,7 @@ class Agent(Entity):
 
         return False
 
-    def render(self):
+    def render(self, events, callback):
         # Sprite orientation
         current_sprite = self.sl.get_entity_sprite_at_frame(self.sprite, self.current_frame)
         current_sprite = pygame.transform.scale(current_sprite,
@@ -205,9 +210,17 @@ class Agent(Entity):
         # Size for translation
         sprite_width, sprite_height = current_sprite.get_size()
 
+        # Check on click
+        for event in events:
+            if event.type == pygame.MOUSEBUTTONUP and not getattr(event, 'handled', False):
+                x, y = event.pos
+                if (self.position.x - (sprite_width / 2) <= x <= self.position.x + (sprite_width / 2)
+                        and self.position.y - (sprite_height / 2) <= y <= self.position.y + (sprite_height / 2)):
+                    setattr(event, 'handled', True)
+                    callback(self)
+
         # Render
-        self.window.screen.blit(current_sprite,
-                                (self.position.x - (sprite_width / 2), self.position.y - (sprite_height / 2)))
+        self.window.screen.blit(current_sprite, (self.position.x - (sprite_width / 2), self.position.y - (sprite_height / 2)))
 
         circle_surface = pygame.Surface((self.size * 2, self.size * 2), pygame.SRCALPHA)
         pygame.draw.circle(circle_surface, (180, 0, 0) + (int((self.energy / 100) * 255),),

@@ -17,6 +17,7 @@ class GameState(Enum):
     PARENTS_SELECTION = 5
     OFFSPRING_OVERVIEW = 6
     CONDITION_OVERVIEW = 7
+    AGENT_TREE = 8
 
 
 class EntitySprite(Enum):
@@ -191,7 +192,7 @@ class SpriteLoader:
 
 
 class Window:
-    def __init__(self, sl: SpriteLoader, cm: ConditionManager, fps: int = 60, r: int = 50, g: int = 50, b: int = 50):
+    def __init__(self, sl: SpriteLoader, cm: ConditionManager, fps: int = 60):
         self.width = 1000
         self.height = 600
         self.fps = fps

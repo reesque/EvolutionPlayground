@@ -1,3 +1,4 @@
+import math
 import random
 
 import numpy as np
@@ -18,7 +19,7 @@ class PauseBox(UIElement):
         self.window = window
         self.font = pygame.font.Font('assets/PressStart2P-Regular.ttf', 15)
         self.text = self.font.render("PAUSED", True, (255, 255, 255))
-        self.box = pygame.Rect((self.window.width // 2) - 60, (self.window.height // 2) - 20, 120, 40)
+        self.box = pygame.Rect((self.window.width // 2) - 60, (self.window.height // 2) - 20, 116, 40)
 
     def render(self):
         pygame.draw.rect(self.window.screen, (0, 0, 0), self.box.inflate(0, 0), border_radius=3)
@@ -80,14 +81,12 @@ class Button(UIElement):
 
 
 class AgentCard(UIElement):
-    def __init__(self, window: Window, sl: SpriteLoader, idx: int):
+    def __init__(self, window: Window, sl: SpriteLoader, x: int, y: int):
         super().__init__(window)
-        self.idx = idx
         self.sl = sl
         self.font1 = pygame.font.Font('assets/PressStart2P-Regular.ttf', 13)
         self.font2 = pygame.font.Font('assets/PressStart2P-Regular.ttf', 11)
-        self.font3 = pygame.font.Font('assets/PressStart2P-Regular.ttf', 16)
-        self.box = pygame.Rect(28 + idx * 240, 130, 220, 350)
+        self.box = pygame.Rect(x, y, 220, 350)
 
         self.shadow = pygame.Surface((self.box.width, self.box.height), pygame.SRCALPHA)
         pygame.draw.rect(self.shadow, (0, 0, 0, 120), self.shadow.get_rect(), border_radius=5)
@@ -134,7 +133,17 @@ class AgentCard(UIElement):
         if pygame.time.get_ticks() % 10 == 0:
             self.current_frame = pygame.time.get_ticks() % self.sl.get_num_frame_in_entity_sprite(agent.sprite)
 
-    def render_child(self, agent: Agent, is_mutate: bool, speed_mutation: float = 0.0, size_mutation: float = 0.0):
+    def collidepoint(self, pos):
+        return self.box.collidepoint(pos)
+
+
+class AgentChildCard(AgentCard):
+    def __init__(self, window: Window, sl: SpriteLoader, x: int, y: int):
+        super().__init__(window, sl, x, y)
+
+        self.font3 = pygame.font.Font('assets/PressStart2P-Regular.ttf', 16)
+
+    def render(self, agent: Agent, is_mutate: bool, speed_mutation: float = 0.0, size_mutation: float = 0.0):
         if self.current_frame == -1:
             self.current_frame = random.randint(0, self.sl.get_num_frame_in_entity_sprite(agent.sprite) - 1)
 
@@ -175,13 +184,10 @@ class AgentCard(UIElement):
         self.window.screen.blit(awareness, (self.box.x + 22, self.box.y + 235))
         if is_mutate:
             pygame.draw.rect(self.window.screen, (255, 255, 0), self.box, 5, border_radius=5)
-            self.window.screen.blit(mutated, (self.box.x + 55, self.box.y + 282))
+            self.window.screen.blit(mutated, (self.box.x + 55, self.box.y + 280))
 
         if pygame.time.get_ticks() % 10 == 0:
             self.current_frame = pygame.time.get_ticks() % self.sl.get_num_frame_in_entity_sprite(agent.sprite)
-
-    def collidepoint(self, pos):
-        return self.box.collidepoint(pos)
 
 
 class ParentsSelection(UIElement):
@@ -195,7 +201,7 @@ class ParentsSelection(UIElement):
                                  button_color=(0, 0, 0), text_color=(255, 255, 255))
         self.confirm_btn = Button(window, 505, 520, 115, 40, 'Confirm', 15, (13, 13),
                                   button_color=(0, 0, 0), text_color=(255, 255, 255))
-        self.card = [AgentCard(window, sl, c) for c in range(4)]
+        self.card = [AgentCard(window, sl, 28 + c * 240, 130) for c in range(4)]
         self.active = [False for _ in range(4)]
 
     def reset(self):
@@ -243,7 +249,7 @@ class Offspring(UIElement):
 
         self.confirm_btn = Button(window, 455, 520, 85, 40, 'Okay', 15, (13, 13),
                                   button_color=(0, 0, 0), text_color=(255, 255, 255))
-        self.card = [AgentCard(window, sl, c) for c in range(4)]
+        self.card = [AgentChildCard(window, sl, 28 + c * 240, 130) for c in range(4)]
 
     def render(self, offsprings: list[(Agent, bool, int, int)], events, callback):
         for event in events:
@@ -256,7 +262,7 @@ class Offspring(UIElement):
 
         for i in range(len(offsprings)):
             agent, is_mutate, speed_mutate, size_mutate = offsprings[i]
-            self.card[i].render_child(agent, is_mutate, speed_mutate, size_mutate)
+            self.card[i].render(agent, is_mutate, speed_mutate, size_mutate)
 
         self.confirm_btn.render()
 
@@ -317,8 +323,8 @@ class MainMenu(UIElement):
         self.start_btn = Button(window, 40, 310, 125, 44, 'Start', 20, (13, 13))
 
         self.menu_agent = MenuAgent(window, sl, cm, EntitySprite.CHICKEN, 3.0, sprite_callback,
-                                    bound=((25, self.window.height - 220),
-                                           (self.window.width - 25, self.window.height - 25)))
+                                    bound=((50, self.window.height - 220),
+                                           (self.window.width - 50, self.window.height - 50)))
 
     def render(self, events):
         for event in events:
@@ -382,6 +388,7 @@ class ConditionCard(UIElement):
         self.sl = sl
         self.font1 = pygame.font.Font('assets/PressStart2P-Regular.ttf', 21)
         self.font2 = pygame.font.Font('assets/PressStart2P-Regular.ttf', 11)
+        self.font3 = pygame.font.Font('assets/PressStart2P-Regular.ttf', 44)
 
         self.pos = (354, 130)
         self.box = pygame.Rect(self.pos[0], self.pos[1], 280, 350)
@@ -425,8 +432,10 @@ class ConditionCard(UIElement):
 
             return
 
-        title = self.font1.render("None", True, (255, 255, 255))
-        self.window.screen.blit(title, (self.pos[0] + 103, self.pos[1] + 160))
+        pygame.draw.circle(self.window.screen, (50, 50, 50),
+                           (self.pos[0] + 144, self.pos[1] + 180), 55, width=4)
+        title = pygame.transform.rotate(self.font3.render('None', True, (180, 180, 180)), 348)
+        self.window.screen.blit(title, (self.pos[0] + 56, self.pos[1] + 142))
 
     def render_wrapped_text(self, text, font, max_width):
         words = text.split(' ')
@@ -452,7 +461,7 @@ class ConditionOverview(UIElement):
         super().__init__(window)
 
         self.font = pygame.font.Font('assets/PressStart2P-Regular.ttf', 25)
-        self.title = self.font.render('Next Environmental Condition', True, (0, 0, 0))
+        self.title = self.font.render('Environment Modification', True, (0, 0, 0))
 
         self.confirm_btn = Button(window, 455, 520, 85, 40, 'Okay', 15, (13, 13),
                                   button_color=(0, 0, 0), text_color=(255, 255, 255))
@@ -465,6 +474,135 @@ class ConditionOverview(UIElement):
                 if self.confirm_btn.collidepoint(event.pos) and not getattr(event, 'handled', False):
                     callback()
 
-        self.window.screen.blit(self.title, (145, 50))
+        self.window.screen.blit(self.title, (210, 50))
         self.card.render(condition)
         self.confirm_btn.render()
+
+
+class AgentTreeCard(UIElement):
+    def __init__(self, window: Window, sl: SpriteLoader, x: int, y: int):
+        super().__init__(window)
+
+        self.sl = sl
+        self.font1 = pygame.font.Font('assets/PressStart2P-Regular.ttf', 13)
+        self.font2 = pygame.font.Font('assets/PressStart2P-Regular.ttf', 11)
+        self.font3 = pygame.font.Font('assets/PressStart2P-Regular.ttf', 22)
+        self.box = pygame.Rect(x, y, 220, 350)
+
+        self.shadow = pygame.Surface((self.box.width, self.box.height), pygame.SRCALPHA)
+        pygame.draw.rect(self.shadow, (0, 0, 0, 120), self.shadow.get_rect(), border_radius=5)
+
+        self.current_frame = -1
+
+    def render(self, events, agent: Agent, is_parent: bool, parent_num: int = -1, callback=None):
+        for event in events:
+            if event.type == pygame.MOUSEBUTTONUP:
+                # Prevent clicking on button underneath
+                if self.box.collidepoint(event.pos) and not getattr(event, 'handled', False):
+                    setattr(event, 'handled', True)
+
+                    if agent is not None and callback is not None:
+                        callback(agent)
+
+        self.window.screen.blit(self.shadow, (self.box.x + 8, self.box.y + 8))
+        pygame.draw.rect(self.window.screen, (0, 0, 0), self.box.inflate(0, 0), border_radius=5)
+
+        if agent is not None:
+            if self.current_frame == -1:
+                self.current_frame = random.randint(0, self.sl.get_num_frame_in_entity_sprite(agent.sprite) - 1)
+
+            # Measures
+            current_sprite = self.sl.get_entity_sprite_at_frame(agent.sprite, self.current_frame)
+            sprite_width, sprite_height = current_sprite.get_size()
+            sprite_pos = (self.box.x + 75, self.box.y + 40)
+            title_size = self.font1.size(agent.sprite.value)
+            id_size = self.font1.size(f'#{agent.id}')
+
+            # Texts
+            title = self.font1.render(f'{agent.sprite.value}', True, (255, 255, 255))
+            agent_id = self.font1.render(f'#{agent.id}', True, (255, 255, 255))
+
+            gen = self.font2.render(f'Gen {agent.generation + 1}', True, (255, 255, 255))
+
+            if agent.mutated:
+                speed = self.font2.render(f'Speed: {agent.speed - agent.mutation_speed_offset:.2G} '
+                                          f'({agent.mutation_speed_offset:+.1G})', True, (255, 255, 255))
+                awareness = self.font2.render(f'Size: {agent.size - agent.mutation_size_offset:.2G} '
+                                              f'({agent.mutation_size_offset:+.1G})', True, (255, 255, 255))
+            else:
+                speed = self.font2.render(f'Speed: {agent.speed:.2G}', True, (255, 255, 255))
+                awareness = self.font2.render(f'Size: {agent.size:.2G}', True, (255, 255, 255))
+
+            fitness = self.font2.render(f'Gathered: {agent.eaten}', True, (255, 255, 255))
+
+            # Render
+            self.window.screen.blit(pygame.transform.scale(
+                current_sprite, (current_sprite.get_width() * 4.5,
+                                 current_sprite.get_height() * 4.5)), sprite_pos)
+
+            self.window.screen.blit(title, (sprite_pos[0] + (sprite_width * 4.5 // 2) - (title_size[0] // 2), sprite_pos[1] + 90))
+            self.window.screen.blit(agent_id, (sprite_pos[0] + (sprite_width * 4.5 // 2) - (id_size[0] // 2), sprite_pos[1] + 110))
+
+            self.window.screen.blit(gen, (self.box.x + 22, self.box.y + 210))
+
+            self.window.screen.blit(speed, (self.box.x + 22, self.box.y + 235))
+            self.window.screen.blit(awareness, (self.box.x + 22, self.box.y + 260))
+            self.window.screen.blit(fitness, (self.box.x + 22, self.box.y + 285))
+
+            if pygame.time.get_ticks() % 10 == 0:
+                self.current_frame = pygame.time.get_ticks() % self.sl.get_num_frame_in_entity_sprite(agent.sprite)
+        else:
+            pygame.draw.circle(self.window.screen, (50, 50, 50),
+                               (self.box.x + 110, self.box.y + 180), 60, width=4)
+            title = pygame.transform.rotate(self.font3.render('Unknown', True, (180, 180, 180)), 348)
+            self.window.screen.blit(title, (self.box.x + 35, self.box.y + 155))
+
+        if is_parent:
+            if parent_num == 1:
+                pygame.draw.rect(self.window.screen, (180, 0, 0), self.box, 5, border_radius=5)
+            elif parent_num == 2:
+                pygame.draw.rect(self.window.screen, (0, 0, 180), self.box, 5, border_radius=5)
+
+
+class InspectAgent(UIElement):
+    def __init__(self, window: Window, sl: SpriteLoader, agent: Agent):
+        super().__init__(window)
+
+        self.font = pygame.font.Font('assets/PressStart2P-Regular.ttf', 18)
+
+        self.agent = agent
+        self.confirm_btn = Button(window, 455, 530, 85, 40, 'Okay', 15, (13, 13),
+                                  button_color=(0, 0, 0), text_color=(255, 255, 255))
+        self.agent_card = AgentTreeCard(window, sl, 700, 130)
+        self.agent_parent1_card = AgentTreeCard(window, sl, 260, 90)
+        self.agent_parent2_card = AgentTreeCard(window, sl, 50, 150)
+
+    def render(self, events, confirm_callback, parent_callback):
+        for event in events:
+            if event.type == pygame.MOUSEBUTTONUP:
+                # Prevent clicking on button underneath
+                if self.confirm_btn.collidepoint(event.pos) and not getattr(event, 'handled', False):
+                    confirm_callback()
+
+        self.agent_card.render(events, self.agent, False)
+        self.draw_arrow((0, 0, 0), 530, 300, 650, 300)
+        self.agent_parent1_card.render(events, self.agent.parent1, True, 1, parent_callback)
+        self.agent_parent2_card.render(events, self.agent.parent2, True, 2, parent_callback)
+
+        self.confirm_btn.render()
+
+    def draw_arrow(self, color, x1, y1, x2, y2, width=6, arrowhead_length=14, arrowhead_angle=30):
+        angle = math.atan2(y2 - y1, x2 - x1)
+
+        line_x2 = x2 - arrowhead_length * math.cos(angle)
+        line_y2 = y2 - arrowhead_length * math.sin(angle)
+
+        pygame.draw.line(self.window.screen, color, (x1, y1), (line_x2, line_y2), width)
+
+        left_x = x2 - arrowhead_length * math.cos(angle - math.radians(arrowhead_angle))
+        left_y = y2 - arrowhead_length * math.sin(angle - math.radians(arrowhead_angle))
+
+        right_x = x2 - arrowhead_length * math.cos(angle + math.radians(arrowhead_angle))
+        right_y = y2 - arrowhead_length * math.sin(angle + math.radians(arrowhead_angle))
+
+        pygame.draw.polygon(self.window.screen, color, [(x2, y2), (left_x, left_y), (right_x, right_y)])

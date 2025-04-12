@@ -34,7 +34,8 @@ class Simulation:
         self.offsprings = None
         self.card_choices = None
         self.sprite = EntitySprite.CHICKEN
-        self.agents = [Agent(self.window, self.sl, self.cm, self.sprite, self.idg()) for _ in range(self.initial_population)]
+        self.agents = [Agent(self.window, self.sl, self.cm,
+                             self.sprite, self.idg(), self.generation) for _ in range(self.initial_population)]
         self.foods = [Food(self.window, self.sl, self.cm) for _ in range(self.initial_food_amount)]
 
         # UI Elements
@@ -48,11 +49,12 @@ class Simulation:
                                      self.ui_callback_game_reset, self.ui_callback_mutation_chance_changed,
                                      self.ui_callback_mutation_strength_changed)
         self.ui_game_over = GameOver(self.window, self.ui_callback_back_to_menu)
+        self.ui_agent_inspect = None
 
         self.run()
         pygame.quit()
 
-    def run_simulation(self, is_paused: bool):
+    def run_simulation(self, events, is_paused: bool):
         agents_moved = 0
 
         if len(self.foods) == 0:
@@ -63,7 +65,7 @@ class Simulation:
             if not is_paused and agent.move(self.foods.copy()):
                 agents_moved = agents_moved + 1
 
-            agent.render()
+            agent.render(events, self.ui_callback_inspect_called)
 
         # Food be eaten
         if not is_paused:
@@ -92,8 +94,8 @@ class Simulation:
         alpha = random.uniform(0.3, 0.7)
         child_speed = alpha * parent1.speed + (1 - alpha) * parent2.speed
         child_size = alpha * parent1.size + (1 - alpha) * parent2.size
-        return Agent(self.window, self.sl, self.cm, self.sprite, self.idg(), speed=child_speed, size=child_size,
-                     parent1=parent1, parent2=parent2)
+        return Agent(self.window, self.sl, self.cm, self.sprite, self.idg(), self.generation,
+                     speed=child_speed, size=child_size, parent1=parent1, parent2=parent2)
 
     def mutate(self, agent: Agent):
         speed_mutation = 0
@@ -104,6 +106,10 @@ class Simulation:
             size_mutation = round(random.uniform(-self.mutation_strength, self.mutation_strength), 2)
             agent.speed += speed_mutation
             agent.size += size_mutation
+
+            agent.mutated = True
+            agent.mutation_speed_offset = speed_mutation
+            agent.mutation_size_offset = size_mutation
 
         return mutated, speed_mutation, size_mutation
 
@@ -135,8 +141,7 @@ class Simulation:
             if self.ui_parent1 is not None and self.ui_parent2 is not None:
                 child_choices, child_policy = self.child_policy_distribution(self.ui_parent1.eaten + self.ui_parent2.eaten)
                 self.offsprings = []
-                num_child = np.random.choice(child_choices, p=child_policy)
-                for _ in range(num_child):
+                for _ in range(np.random.choice(child_choices, p=child_policy)):
                     child = self.blend_crossover(self.ui_parent1, self.ui_parent2)
                     mutated, speed_mutation, size_mutation = self.mutate(child)
                     self.offsprings.append((child, mutated, speed_mutation, size_mutation))
@@ -197,9 +202,9 @@ class Simulation:
                     return
 
                 elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
-                        pygame.quit()
-                        return
+                    #if event.key == pygame.K_ESCAPE:
+                    #    pygame.quit()
+                    #    return
 
                     if event.key == pygame.K_SPACE:
                         if self.game_state == GameState.SIM_RUNNING:
@@ -243,9 +248,14 @@ class Simulation:
                 self.ui_game_over.render(events, self.generation)
                 self.window.tick()
 
+            elif self.game_state == GameState.AGENT_TREE:
+                self.window.clear()
+                self.ui_agent_inspect.render(events, self.ui_callback_inspect_confirm, self.ui_callback_inspect_called)
+                self.window.tick()
+
             elif self.game_state == GameState.SIM_RUNNING or self.game_state == GameState.SIM_PAUSED:
                 self.window.clear()
-                done = self.run_simulation(self.game_state == GameState.SIM_PAUSED)
+                done = self.run_simulation(events, self.game_state == GameState.SIM_PAUSED)
 
                 if self.game_state == GameState.SIM_PAUSED:
                     self.ui_pause_box.render()
@@ -264,7 +274,9 @@ class Simulation:
         self.offsprings = []
         self.idg.reset()
         self.cm.reset()
-        self.agents = [Agent(self.window, self.sl, self.cm, self.sprite, self.idg()) for _ in range(self.initial_population)]
+        self.ui_agent_inspect = None
+        self.agents = [Agent(self.window, self.sl, self.cm,
+                             self.sprite, self.idg(), self.generation) for _ in range(self.initial_population)]
         self.foods = [Food(self.window, self.sl, self.cm) for _ in range(self.initial_food_amount)]
 
     def ui_callback_game_reset(self):
@@ -301,6 +313,14 @@ class Simulation:
 
     def ui_callback_mutation_strength_changed(self, value: int):
         self.mutation_strength = value / 10
+
+    def ui_callback_inspect_confirm(self):
+        self.ui_agent_inspect = None
+        self.game_state = GameState.SIM_PAUSED
+
+    def ui_callback_inspect_called(self, agent: Agent):
+        self.ui_agent_inspect = InspectAgent(self.window, self.sl, agent)
+        self.game_state = GameState.AGENT_TREE
 
 
 if __name__ == "__main__":
